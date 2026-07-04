@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-04
+
+### Added
+
+#### 시군구·테마 마스터 테이블 추가 (`mst_sigungu`, `mst_theme`)
+
+경북 권역 시군구 코드와 여행 테마 코드를 관리하는 마스터 테이블 2개를 추가했다.
+
+**`mst_sigungu`**
+- 컬럼: `sigunguCode VARCHAR(20) PK`, `sigunguName VARCHAR(20)`
+- `tour.lDongSignguCd`와 동일한 코드 체계 사용
+- 초기 데이터: 경북 23개 시군구 (포항시 남구·북구, 경주시, 김천시, 안동시 등)
+
+**`mst_theme`**
+- 컬럼: `themeCode VARCHAR(20) PK`, `themeName VARCHAR(20)`
+- 초기 데이터: 4개 테마 (001 어드벤처, 002 휴식, 003 문화, 004 음식)
+
+**`domain/MstSigungu.java`**, **`domain/MstTheme.java`** (신규)
+- JPA 엔티티 (`@Entity`, `@Table`) 등록 — `ddl-auto: validate` 대응
+
+### DDL
+
+`src/main/resources/sql/init_mst_tables.sql` 실행 (CREATE TABLE + INSERT)
+
+### Files Created (3 files)
+
+- `src/main/resources/sql/init_mst_tables.sql`
+- `src/main/java/com/eodegano/cocobackend/domain/MstSigungu.java`
+- `src/main/java/com/eodegano/cocobackend/domain/MstTheme.java`
+
+---
+
 ## [0.4.0] - 2026-07-04
 
 ### Added
