@@ -16,6 +16,14 @@ RULES:
    - Dinner: around 18:00
 6. Ensure variety in place types (don't repeat the same type consecutively unless necessary)
 7. Consider user themes when selecting places
+8. Estimate visit duration in minutes for each place based on type and typical visit patterns:
+   - ATTRACTION: 60-180 min (major sites longer, small sites shorter)
+   - FOOD: 45-90 min
+   - CULTURE: 60-120 min
+   - LEPORTS: 120-240 min
+   - SHOPPING: 30-60 min
+   - EVENT: 60-120 min
+   - ACCOMMODATION: 0 min
 
 RESPONSE FORMAT (JSON only, no additional text):
 {
@@ -23,11 +31,11 @@ RESPONSE FORMAT (JSON only, no additional text):
     {
       "date": "2026-06-01",
       "places": [
-        {"seq": 1, "time": "09:00:00", "type": "ATTRACTION", "contentId": 123456},
-        {"seq": 2, "time": "12:00:00", "type": "FOOD", "contentId": 789012},
-        {"seq": 3, "time": "14:00:00", "type": "CULTURE", "contentId": 345678},
-        {"seq": 4, "time": "18:00:00", "type": "FOOD", "contentId": 901234},
-        {"seq": 5, "time": "21:00:00", "type": "ACCOMMODATION", "contentId": 567890}
+        {"seq": 1, "time": "09:00:00", "type": "ATTRACTION", "contentId": 123456, "durationMinutes": 120},
+        {"seq": 2, "time": "12:00:00", "type": "FOOD", "contentId": 789012, "durationMinutes": 60},
+        {"seq": 3, "time": "14:00:00", "type": "CULTURE", "contentId": 345678, "durationMinutes": 90},
+        {"seq": 4, "time": "18:00:00", "type": "FOOD", "contentId": 901234, "durationMinutes": 60},
+        {"seq": 5, "time": "21:00:00", "type": "ACCOMMODATION", "contentId": 567890, "durationMinutes": 0}
       ]
     }
   ]
@@ -38,3 +46,4 @@ IMPORTANT:
 - Do not include any explanations or comments
 - Ensure all contentId values exist as id in the provided data
 - Use the exact type names: ATTRACTION, CULTURE, EVENT, LEPORTS, ACCOMMODATION, SHOPPING, FOOD
+- Always include durationMinutes for every place entry

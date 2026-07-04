@@ -35,5 +35,9 @@ public class TourCourseShareResponseDto {
         private String type;
         private Long contentId;
         private String placeName;
+        private Integer durationMinutes;
+        private String thumbnailImg;
+        private String operatingHours;
+        private Integer cost;
     }
 }

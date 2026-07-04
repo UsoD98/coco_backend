@@ -41,6 +41,9 @@ public class TourCourseUserDefinedDetail {
     @Column(name = "time", nullable = false)
     private LocalTime time;
 
+    @Column(name = "duration_minutes")
+    private Integer durationMinutes;
+
     @Column(name = "type", nullable = false, length = 20)
     private String type;
 

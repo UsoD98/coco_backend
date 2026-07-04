@@ -12,6 +12,9 @@ public interface TourRepository extends JpaRepository<Tour, Long> {
     @Query("SELECT t FROM Tour t WHERE t.lDongSignguCd = :lDongSignguCd")
     List<Tour> findByLDongSignguCd(@Param("lDongSignguCd") String lDongSignguCd);
 
+    @Query("SELECT t FROM Tour t WHERE t.lDongSignguCd IN :codes")
+    List<Tour> findByLDongSignguCdIn(@Param("codes") List<String> codes);
+
     List<Tour> findByContentidIn(List<Long> contentIds);
 
     @Modifying(clearAutomatically = true)

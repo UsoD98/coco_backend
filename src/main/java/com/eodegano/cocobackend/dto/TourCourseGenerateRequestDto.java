@@ -35,7 +35,7 @@ public class TourCourseGenerateRequestDto {
     @NotEmpty(message = "테마는 최소 1개 이상 선택해야 합니다")
     private List<String> theme;
 
-    private String sigunguCode;
+    private List<String> sigunguCodes;
 
     @AssertTrue(message = "종료 날짜는 시작 날짜 이후여야 합니다")
     public boolean isValidDateRange() {

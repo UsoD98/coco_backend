@@ -3,7 +3,7 @@
 > 출처: 『2026 관광데이터 활용 공모전』 백엔드 repo 기준 명세.
 > 본 문서는 프론트엔드 PRD([PRD_FRONT.md](PRD_FRONT.md))가 요구하는 데이터·액션을 **백엔드 관점**으로 재서술한다.
 > 대상 범위: REST API 서버, DB 스키마, 외부 API 연동(한국관광공사 TourAPI, Groq AI), 인증/인가.
-> 버전 0.3.1 · 기준일 2026-06-27.
+> 버전 0.4.2 · 기준일 2026-07-04.
 
 ---
 
@@ -113,11 +113,12 @@ com.eodegano.cocobackend/
 
 ### B-F2. 여행 코스 자동 생성 — 현재 및 목표 진화
 
-**현재 구현 (v0.3.1 — Groq AI + Tier 샘플링)**
-- `POST /api/v1/tour-course` — 인원·기간·이동수단·테마·시군구 입력을 받아 Groq LLM으로 일정별(Day N) 코스 자동 생성.
+**현재 구현 (v0.4.2 — 시군구 복수 선택)**
+- `POST /api/v1/tour-course` — 인원·기간·이동수단·테마·시군구(복수, `sigunguCodes: []`) 입력을 받아 Groq LLM으로 일정별(Day N) 코스 자동 생성.
 - DB에서 지역 POI를 유형별 할당량으로 샘플링 → AI 프롬프트 컨텍스트로 전달.
 - **v0.2.6 샘플링 개선**: Hard exclusion(stars ≤ 1) → Tier A(stars ≥ 4, 70%) / Tier B(stars 2-3·null, 30%) 확률적 Tier 샘플링. likes 있으면 Tier 내 DESC 정렬, 없으면 shuffle. Cold-start(null) → Tier B 편입.
 - **v0.3.1 Rate Limit 개선**: Groq API 429 응답 시 `retry-after` 헤더 기반 대기(기본 20초)로 재시도. 기타 에러와 명시적으로 분리.
+- **v0.4.0 장소별 상세 필드 추가**: 응답 `PlaceInfo`에 `durationMinutes`(AI 추정·DB 저장)·`thumbnailImg`·`operatingHours`·`cost` 4개 필드 추가. CO4·SH2도 동일 필드 반환.
 - AI 응답 검증(날짜 범위, contentId 실존, PlaceType 유효성) 후 `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장.
 - 비로그인(userId=null) 허용으로 생성 후 저장까지 동작.
 
@@ -207,7 +208,7 @@ com.eodegano.cocobackend/
 | 엔티티 | 테이블 | 역할 |
 | --- | --- | --- |
 | `TourCourseUserDefined` | `tour_course_user_defined` | 사용자 생성 코스 헤더 (userId·인원·기간·이동수단·테마JSON·title). ⚠️ total_budget·share_token 컬럼 없음 |
-| `TourCourseUserDefinedDetail` | `tour_course_user_defined_detail` | 코스 일정 상세 (날짜·순서·시간·type·contentId). ⚠️ POI별 예산 오버라이드 컬럼 없음 |
+| `TourCourseUserDefinedDetail` | `tour_course_user_defined_detail` | 코스 일정 상세 (날짜·순서·시간·`duration_minutes`·type·contentId). ⚠️ POI별 예산 오버라이드 컬럼 없음 |
 
 > **스키마 설계 이력**: DDL v1에서 `title`, `total_budget`, `per_budget`, `course_data`(JSON), `share_token`, `is_public`이 있던 `tour_course_user_defined`가 2026-05-30 drop 후 재설계되어 현재 구조로 변경됨. 공유·예산 저장 기능 구현 전 BOQ9~BOQ11 결정 필요.
 
@@ -221,8 +222,9 @@ com.eodegano.cocobackend/
 - **카카오 OAuth 연동** (`POST /api/v1/auth/oauth/kakao/callback`) — FE 전달 카카오 AccessToken 검증, 신규 가입·기존 계정 연결·자체 JWT 발급 (`KakaoOAuthService` + `KakaoApiClient`)
 - TourAPI 데이터 수집·DB 적재 (`DataMigrationController`)
 - Groq AI 여행 코스 생성 (`POST /api/v1/tour-course`) — 비로그인 허용, userId=null
-- `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장
+- `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장 (`duration_minutes` 포함)
 - **Tier 기반 확률적 POI 샘플링** — stars Hard exclusion + Tier A/B 분할 + likes 보조 정렬 (`TourCourseServiceImpl.selectByTypeQuota`)
+- **장소별 상세 필드** — `durationMinutes`(AI 추정)·`thumbnailImg`·`operatingHours`·`cost` 4개 필드를 CO1·CO4·SH2 응답에 포함
 - `tour.stars`·`tour.likes` 컬럼 추가, `user_poi_like` 중계 테이블로 likes 수집 파이프라인 구축
 - **POI 좋아요 토글 API** (`POST /api/v1/poi/{contentId}/like`) — `user_poi_like` 중복 방지, 원자적 JPQL increment/decrement
 - `tour_course_user_defined.title VARCHAR(255)` 컬럼 + 코스 제목 수정 API (`PATCH /{courseId}/title`)

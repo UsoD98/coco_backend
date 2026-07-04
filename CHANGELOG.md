@@ -7,6 +7,125 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-04
+
+### Changed
+
+#### AI 코스 생성 요청 `sigunguCode` → `sigunguCodes` (배열) 변경 (CO1)
+
+사용자가 여러 시군구를 대상으로 코스를 생성할 수 있도록 단일 문자열 파라미터를 배열로 변경했다.
+
+- **`TourCourseGenerateRequestDto`**: `String sigunguCode` → `List<String> sigunguCodes`
+- **`TourRepository`**: `findByLDongSignguCdIn(List<String>)` 메서드 추가 (JPQL `IN` 쿼리)
+- **`TourCourseServiceImpl.fetchPlacesData`**: 복수 코드 수신 시 `IN` 쿼리로 여러 지역 POI를 통합 조회, `null`/빈 배열이면 전체 지역 폴백 유지
+
+**요청 예시 (변경 전)**
+```json
+{ "sigunguCode": "35011" }
+```
+**요청 예시 (변경 후)**
+```json
+{ "sigunguCodes": ["35011", "35130"] }
+```
+
+### Files Changed (3 files)
+
+- `dto/TourCourseGenerateRequestDto.java`
+- `repository/TourRepository.java`
+- `service/TourCourseServiceImpl.java`
+
+---
+
+## [0.4.1] - 2026-07-04
+
+### Added
+
+#### 시군구·테마 마스터 테이블 추가 (`mst_sigungu`, `mst_theme`)
+
+경북 권역 시군구 코드와 여행 테마 코드를 관리하는 마스터 테이블 2개를 추가했다.
+
+**`mst_sigungu`**
+- 컬럼: `sigunguCode VARCHAR(20) PK`, `sigunguName VARCHAR(20)`
+- `tour.lDongSignguCd`와 동일한 코드 체계 사용
+- 초기 데이터: 경북 23개 시군구 (포항시 남구·북구, 경주시, 김천시, 안동시 등)
+
+**`mst_theme`**
+- 컬럼: `themeCode VARCHAR(20) PK`, `themeName VARCHAR(20)`
+- 초기 데이터: 4개 테마 (001 어드벤처, 002 휴식, 003 문화, 004 음식)
+
+**`domain/MstSigungu.java`**, **`domain/MstTheme.java`** (신규)
+- JPA 엔티티 (`@Entity`, `@Table`) 등록 — `ddl-auto: validate` 대응
+
+### DDL
+
+`src/main/resources/sql/init_mst_tables.sql` 실행 (CREATE TABLE + INSERT)
+
+### Files Created (3 files)
+
+- `src/main/resources/sql/init_mst_tables.sql`
+- `src/main/java/com/eodegano/cocobackend/domain/MstSigungu.java`
+- `src/main/java/com/eodegano/cocobackend/domain/MstTheme.java`
+
+---
+
+## [0.4.0] - 2026-07-04
+
+### Added
+
+#### 여행 코스 응답에 장소별 상세 필드 4개 추가 (CO1·CO4·SH2)
+
+코스 생성(`POST /api/v1/tour-course`), 코스 상세 조회(`GET /api/v1/tour-course/{courseId}`), 공개 코스 뷰(`GET /api/v1/tour-course/{courseId}/view`) 응답의 `PlaceInfo` 객체에 4개 필드를 추가했다.
+
+| 필드 | 타입 | 출처 | 설명 |
+| --- | --- | --- | --- |
+| `durationMinutes` | Integer | Groq AI 추정 → DB 저장 | 해당 장소 관광 예상 소요시간(분) |
+| `thumbnailImg` | String | `tour.firstimage` join | 장소 대표 썸네일 이미지 URL |
+| `operatingHours` | String | type별 소개정보 테이블 | 운영시간 원문 텍스트 (없으면 null) |
+| `cost` | Integer | DB 우선 → type 기본값 fallback | 예상 비용(원). ACCOMMODATION은 null |
+
+**`durationMinutes` 상세**
+- Groq 시스템 프롬프트 Rule 8 추가: 장소 type별 소요시간 추정 기준 명시 (ATTRACTION 60-180분, FOOD 45-90분, CULTURE 60-120분, LEPORTS 120-240분, SHOPPING 30-60분, EVENT 60-120분, ACCOMMODATION 0분).
+- 응답 포맷 예시에 `durationMinutes` 필드 추가 및 "Always include durationMinutes for every place entry" 명시.
+- AI가 추정한 값을 `tour_course_user_defined_detail.duration_minutes` 컬럼에 저장.
+- CO4·SH2 조회 시 DB에서 그대로 반환.
+
+**`operatingHours` 상세**
+- type별 소개정보 테이블의 운영시간 컬럼에서 조회 후 HTML 태그(`<br>` → `\n`, 기타 태그 제거) 정규화.
+- 컬럼 매핑: ATTRACTION → `attraction.usetime`, FOOD → `food.opentimefood`, CULTURE → `culture.usetimeculture`, LEPORTS → `leports.usetimeleports`, SHOPPING → `shopping.opentime`.
+- EVENT·ACCOMMODATION은 신뢰할 수 있는 운영시간 컬럼 없음 → null 반환.
+- DB 값 없거나 공백이면 null 반환.
+
+**`cost` 상세**
+- DB 우선 조회: CULTURE → `culture.usefee`, EVENT → `event.usetimefestival`에서 파싱. `"무료"` 포함 시 0, 숫자 추출 가능 시 해당 값 사용.
+- DB 없거나 파싱 불가 시 type 기본값으로 fallback: ATTRACTION 5,000원 / FOOD 12,000원 / CULTURE 3,000원 / LEPORTS 20,000원 / SHOPPING 0원 / EVENT 0원.
+- ACCOMMODATION은 null (별도 예산 처리 예정).
+
+**`TourCourseServiceImpl` 리팩토링**
+- type별 repository 6개 의존성 추가: `AttractionRepository`, `FoodRepository`, `CultureRepository`, `LeportsRepository`, `ShoppingRepository`, `EventRepository`.
+- `buildGenerateResponse()` (기존 `buildResponse()` 리네임): AI 응답 → 보강 데이터 포함 응답 빌드.
+- `buildCourseResponse()`: `tourRepository.findByContentidIn()` 단일 조회로 titleMap·thumbnailMap 동시 구성 (중복 쿼리 제거).
+- 헬퍼 메서드 추가: `buildThumbnailMap()`, `buildOperatingHoursMap()`, `buildCostMap()`, `groupAiPlacesByType()`, `groupDetailsByType()`, `stripHtml()`, `parseCostFromDb()`.
+
+### DDL
+
+```sql
+ALTER TABLE tour_course_user_defined_detail
+    ADD COLUMN duration_minutes INT NULL AFTER time;
+```
+
+### Files Modified (7 files)
+
+- `src/main/resources/prompts/system-prompt.txt`
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseAiResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/domain/TourCourseUserDefinedDetail.java`
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseGenerateResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseShareResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+
+---
+
 ## [0.3.1] - 2026-06-27
 
 ### Fixed

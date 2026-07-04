@@ -29,27 +29,39 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TourCourseServiceImpl implements TourCourseService {
 
-    // 하루 식사 횟수: 2(점심+저녁) or 3(아침+점심+저녁)
     private static final int MEALS_PER_DAY = 2;
     private static final int MAX_TRIP_DAYS = 7;
-
-    // Tier A(stars >= 4)가 차지하는 슬롯 비율. 나머지는 Tier B(stars 2-3 또는 미평가).
     private static final double TIER_A_RATIO = 0.7;
 
-    private static final int QUOTA_FOOD          = MEALS_PER_DAY * MAX_TRIP_DAYS; // 2*7=14 → 3*7=21
+    private static final int QUOTA_FOOD          = MEALS_PER_DAY * MAX_TRIP_DAYS;
     private static final int QUOTA_ACCOMMODATION =  4;
     private static final int QUOTA_ATTRACTION    = 12;
     private static final int QUOTA_CULTURE       =  5;
     private static final int QUOTA_LEPORTS       =  3;
     private static final int QUOTA_SHOPPING      =  2;
     private static final int QUOTA_EVENT         =  2;
-    // 총합: MEALS_PER_DAY=2 기준 40개, =3 기준 47개
+
+    // type별 기본 예상 비용 (원)
+    private static final Map<String, Integer> DEFAULT_COST_BY_TYPE = Map.of(
+        "ATTRACTION", 5000,
+        "FOOD",       12000,
+        "CULTURE",    3000,
+        "LEPORTS",    20000,
+        "SHOPPING",   0,
+        "EVENT",      0
+    );
 
     private final GroqApiClient groqApiClient;
     private final TourRepository tourRepository;
     private final TourCourseUserDefinedRepository tourCourseUserDefinedRepository;
     private final TourCourseUserDefinedDetailRepository tourCourseUserDefinedDetailRepository;
     private final UserRepository userRepository;
+    private final AttractionRepository attractionRepository;
+    private final FoodRepository foodRepository;
+    private final CultureRepository cultureRepository;
+    private final LeportsRepository leportsRepository;
+    private final ShoppingRepository shoppingRepository;
+    private final EventRepository eventRepository;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -63,23 +75,12 @@ public class TourCourseServiceImpl implements TourCourseService {
 
         log.info("Generating tour course for user: {}, request: {}", userId, request);
 
-        // 1. DB 데이터 조회 및 JSON 변환
-        String placesData = fetchPlacesData(request.getSigunguCode());
-
-        // 2. 사용자 요청 문자열 생성
+        String placesData = fetchPlacesData(request.getSigunguCodes());
         String userRequest = buildUserRequest(request);
-
-        // 3. Groq API 호출
         TourCourseAiResponseDto aiResponse = groqApiClient.generateTourCourse(placesData, userRequest);
-
-        // 4. AI 응답 검증
         validateAiResponse(aiResponse, request.getStartDate(), request.getEndDate());
-
-        // 5. DB 저장
         TourCourseUserDefined savedCourse = saveTourCourse(request, userId, aiResponse);
-
-        // 6. 응답 생성
-        return buildResponse(savedCourse.getId(), aiResponse);
+        return buildGenerateResponse(savedCourse.getId(), aiResponse);
     }
 
     @Override
@@ -144,56 +145,6 @@ public class TourCourseServiceImpl implements TourCourseService {
         tourCourseUserDefinedRepository.delete(course);
     }
 
-    private TourCourseShareResponseDto buildCourseResponse(TourCourseUserDefined course) {
-        List<TourCourseUserDefinedDetail> details =
-                tourCourseUserDefinedDetailRepository.findByTourCourseId(course.getId());
-
-        Map<Long, String> titleMap = tourRepository.findByContentidIn(
-                details.stream().map(TourCourseUserDefinedDetail::getContentId).collect(Collectors.toList())
-        ).stream().collect(Collectors.toMap(Tour::getContentid, Tour::getTitle));
-
-        List<TourCourseShareResponseDto.DailySchedule> schedule = details.stream()
-                .collect(Collectors.groupingBy(TourCourseUserDefinedDetail::getDate))
-                .entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> {
-                    List<TourCourseShareResponseDto.PlaceInfo> places = entry.getValue().stream()
-                            .sorted(Comparator.comparingInt(TourCourseUserDefinedDetail::getSeq))
-                            .map(d -> TourCourseShareResponseDto.PlaceInfo.builder()
-                                    .seq(d.getSeq())
-                                    .time(d.getTime())
-                                    .type(d.getType())
-                                    .contentId(d.getContentId())
-                                    .placeName(titleMap.getOrDefault(d.getContentId(), ""))
-                                    .build())
-                            .collect(Collectors.toList());
-                    return TourCourseShareResponseDto.DailySchedule.builder()
-                            .date(entry.getKey())
-                            .places(places)
-                            .build();
-                })
-                .collect(Collectors.toList());
-
-        return TourCourseShareResponseDto.builder()
-                .courseId(course.getId())
-                .title(course.getTitle())
-                .peopleCount(course.getPeopleCount())
-                .startDate(course.getStartDate())
-                .endDate(course.getEndDate())
-                .transport(course.getTransport())
-                .theme(parseTheme(course.getTheme()))
-                .schedule(schedule)
-                .build();
-    }
-
-    private List<String> parseTheme(String themeJson) {
-        try {
-            return objectMapper.readValue(themeJson, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            return Collections.emptyList();
-        }
-    }
-
     @Override
     @Transactional
     public void assignCourse(Long courseId, String userEmail) {
@@ -226,12 +177,244 @@ public class TourCourseServiceImpl implements TourCourseService {
         course.updateTitle(title);
     }
 
-    private String fetchPlacesData(String sigunguCode) {
-        log.info("Fetching places data for sigunguCode: {}", sigunguCode);
+    // ── 코스 응답 빌더 ─────────────────────────────────────────────────────────
 
-        List<Tour> allTours = (sigunguCode == null || sigunguCode.isBlank())
+    private TourCourseGenerateResponseDto buildGenerateResponse(Long courseId, TourCourseAiResponseDto aiResponse) {
+        List<Long> allContentIds = aiResponse.getSchedule().stream()
+                .flatMap(day -> day.getPlaces().stream())
+                .map(TourCourseAiResponseDto.PlaceVisit::getContentId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<String, List<Long>> contentIdsByType = groupAiPlacesByType(aiResponse);
+        List<Tour> tours = tourRepository.findByContentidIn(allContentIds);
+        Map<Long, String> thumbnailMap = buildThumbnailMap(tours);
+        Map<Long, String> operatingHoursMap = buildOperatingHoursMap(contentIdsByType);
+        Map<Long, Integer> costMap = buildCostMap(contentIdsByType);
+
+        List<TourCourseGenerateResponseDto.DailySchedule> schedules = aiResponse.getSchedule().stream()
+                .map(day -> {
+                    List<TourCourseGenerateResponseDto.PlaceInfo> places = day.getPlaces().stream()
+                            .map(place -> TourCourseGenerateResponseDto.PlaceInfo.builder()
+                                    .seq(place.getSeq())
+                                    .time(place.getTime())
+                                    .type(place.getType())
+                                    .contentId(place.getContentId())
+                                    .durationMinutes(place.getDurationMinutes())
+                                    .thumbnailImg(thumbnailMap.get(place.getContentId()))
+                                    .operatingHours(operatingHoursMap.get(place.getContentId()))
+                                    .cost(costMap.get(place.getContentId()))
+                                    .build())
+                            .collect(Collectors.toList());
+
+                    return TourCourseGenerateResponseDto.DailySchedule.builder()
+                            .date(day.getDate())
+                            .places(places)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return TourCourseGenerateResponseDto.builder()
+                .courseId(courseId)
+                .schedule(schedules)
+                .build();
+    }
+
+    private TourCourseShareResponseDto buildCourseResponse(TourCourseUserDefined course) {
+        List<TourCourseUserDefinedDetail> details =
+                tourCourseUserDefinedDetailRepository.findByTourCourseId(course.getId());
+
+        List<Long> allContentIds = details.stream()
+                .map(TourCourseUserDefinedDetail::getContentId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<String, List<Long>> contentIdsByType = groupDetailsByType(details);
+        List<Tour> tours = tourRepository.findByContentidIn(allContentIds);
+        Map<Long, String> titleMap = tours.stream()
+                .collect(Collectors.toMap(Tour::getContentid, Tour::getTitle));
+        Map<Long, String> thumbnailMap = buildThumbnailMap(tours);
+        Map<Long, String> operatingHoursMap = buildOperatingHoursMap(contentIdsByType);
+        Map<Long, Integer> costMap = buildCostMap(contentIdsByType);
+
+        List<TourCourseShareResponseDto.DailySchedule> schedule = details.stream()
+                .collect(Collectors.groupingBy(TourCourseUserDefinedDetail::getDate))
+                .entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    List<TourCourseShareResponseDto.PlaceInfo> places = entry.getValue().stream()
+                            .sorted(Comparator.comparingInt(TourCourseUserDefinedDetail::getSeq))
+                            .map(d -> TourCourseShareResponseDto.PlaceInfo.builder()
+                                    .seq(d.getSeq())
+                                    .time(d.getTime())
+                                    .type(d.getType())
+                                    .contentId(d.getContentId())
+                                    .placeName(titleMap.getOrDefault(d.getContentId(), ""))
+                                    .durationMinutes(d.getDurationMinutes())
+                                    .thumbnailImg(thumbnailMap.get(d.getContentId()))
+                                    .operatingHours(operatingHoursMap.get(d.getContentId()))
+                                    .cost(costMap.get(d.getContentId()))
+                                    .build())
+                            .collect(Collectors.toList());
+                    return TourCourseShareResponseDto.DailySchedule.builder()
+                            .date(entry.getKey())
+                            .places(places)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return TourCourseShareResponseDto.builder()
+                .courseId(course.getId())
+                .title(course.getTitle())
+                .peopleCount(course.getPeopleCount())
+                .startDate(course.getStartDate())
+                .endDate(course.getEndDate())
+                .transport(course.getTransport())
+                .theme(parseTheme(course.getTheme()))
+                .schedule(schedule)
+                .build();
+    }
+
+    // ── 보강 데이터 빌더 ───────────────────────────────────────────────────────
+
+    private Map<Long, String> buildThumbnailMap(List<Tour> tours) {
+        return tours.stream()
+                .filter(t -> t.getFirstimage() != null && !t.getFirstimage().isBlank())
+                .collect(Collectors.toMap(Tour::getContentid, Tour::getFirstimage));
+    }
+
+    private Map<Long, String> buildOperatingHoursMap(Map<String, List<Long>> contentIdsByType) {
+        Map<Long, String> result = new HashMap<>();
+
+        List<Long> attractionIds = contentIdsByType.getOrDefault("ATTRACTION", Collections.emptyList());
+        if (!attractionIds.isEmpty()) {
+            attractionRepository.findByContentidIn(attractionIds).forEach(a -> {
+                String val = stripHtml(a.getUsetime());
+                if (val != null) result.put(a.getContentid(), val);
+            });
+        }
+
+        List<Long> foodIds = contentIdsByType.getOrDefault("FOOD", Collections.emptyList());
+        if (!foodIds.isEmpty()) {
+            foodRepository.findByContentidIn(foodIds).forEach(f -> {
+                String val = stripHtml(f.getOpentimefood());
+                if (val != null) result.put(f.getContentid(), val);
+            });
+        }
+
+        List<Long> cultureIds = contentIdsByType.getOrDefault("CULTURE", Collections.emptyList());
+        if (!cultureIds.isEmpty()) {
+            cultureRepository.findByContentidIn(cultureIds).forEach(c -> {
+                String val = stripHtml(c.getUsetimeculture());
+                if (val != null) result.put(c.getContentid(), val);
+            });
+        }
+
+        List<Long> leportsIds = contentIdsByType.getOrDefault("LEPORTS", Collections.emptyList());
+        if (!leportsIds.isEmpty()) {
+            leportsRepository.findByContentidIn(leportsIds).forEach(l -> {
+                String val = stripHtml(l.getUsetimeleports());
+                if (val != null) result.put(l.getContentid(), val);
+            });
+        }
+
+        List<Long> shoppingIds = contentIdsByType.getOrDefault("SHOPPING", Collections.emptyList());
+        if (!shoppingIds.isEmpty()) {
+            shoppingRepository.findByContentidIn(shoppingIds).forEach(s -> {
+                String val = stripHtml(s.getOpentime());
+                if (val != null) result.put(s.getContentid(), val);
+            });
+        }
+
+        // EVENT, ACCOMMODATION → null
+        return result;
+    }
+
+    private Map<Long, Integer> buildCostMap(Map<String, List<Long>> contentIdsByType) {
+        Map<Long, Integer> result = new HashMap<>();
+
+        // 기본값 먼저 세팅
+        DEFAULT_COST_BY_TYPE.forEach((type, defaultCost) ->
+            contentIdsByType.getOrDefault(type, Collections.emptyList())
+                .forEach(id -> result.put(id, defaultCost))
+        );
+
+        // CULTURE: DB usefee 있으면 덮어씀
+        List<Long> cultureIds = contentIdsByType.getOrDefault("CULTURE", Collections.emptyList());
+        if (!cultureIds.isEmpty()) {
+            cultureRepository.findByContentidIn(cultureIds).forEach(c -> {
+                Integer parsed = parseCostFromDb(c.getUsefee());
+                if (parsed != null) result.put(c.getContentid(), parsed);
+            });
+        }
+
+        // EVENT: DB usetimefestival 있으면 덮어씀
+        List<Long> eventIds = contentIdsByType.getOrDefault("EVENT", Collections.emptyList());
+        if (!eventIds.isEmpty()) {
+            eventRepository.findByContentidIn(eventIds).forEach(e -> {
+                Integer parsed = parseCostFromDb(e.getUsetimefestival());
+                if (parsed != null) result.put(e.getContentid(), parsed);
+            });
+        }
+
+        // ACCOMMODATION → null
+        return result;
+    }
+
+    // ── 유틸 ──────────────────────────────────────────────────────────────────
+
+    private String stripHtml(String text) {
+        if (text == null || text.isBlank()) return null;
+        return text.replaceAll("(?i)<br\\s*/?>", "\n")
+                   .replaceAll("<[^>]+>", "")
+                   .trim();
+    }
+
+    private Integer parseCostFromDb(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        if (raw.contains("무료")) return 0;
+        // "3,000원", "성인 5000원" 등에서 첫 번째 연속 숫자만 추출
+        String digits = raw.replaceAll(",", "").replaceAll(".*?(\\d+).*", "$1");
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Map<String, List<Long>> groupAiPlacesByType(TourCourseAiResponseDto aiResponse) {
+        return aiResponse.getSchedule().stream()
+                .flatMap(day -> day.getPlaces().stream())
+                .collect(Collectors.groupingBy(
+                        TourCourseAiResponseDto.PlaceVisit::getType,
+                        Collectors.mapping(TourCourseAiResponseDto.PlaceVisit::getContentId, Collectors.toList())
+                ));
+    }
+
+    private Map<String, List<Long>> groupDetailsByType(List<TourCourseUserDefinedDetail> details) {
+        return details.stream()
+                .collect(Collectors.groupingBy(
+                        TourCourseUserDefinedDetail::getType,
+                        Collectors.mapping(TourCourseUserDefinedDetail::getContentId, Collectors.toList())
+                ));
+    }
+
+    private List<String> parseTheme(String themeJson) {
+        try {
+            return objectMapper.readValue(themeJson, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    // ── POI 샘플링 ────────────────────────────────────────────────────────────
+
+    private String fetchPlacesData(List<String> sigunguCodes) {
+        log.info("Fetching places data for sigunguCodes: {}", sigunguCodes);
+
+        List<Tour> allTours = (sigunguCodes == null || sigunguCodes.isEmpty())
                 ? tourRepository.findAll()
-                : tourRepository.findByLDongSignguCd(sigunguCode);
+                : tourRepository.findByLDongSignguCdIn(sigunguCodes);
 
         if (allTours.isEmpty()) {
             throw new IllegalArgumentException("해당 지역의 여행지 데이터가 없습니다");
@@ -243,7 +426,6 @@ public class TourCourseServiceImpl implements TourCourseService {
     }
 
     private List<Tour> selectByTypeQuota(List<Tour> allTours) {
-        // Hard exclusion: stars 1.0점 이하 제거. null(미평가)은 Tier B로 편입.
         List<Tour> qualifiedTours = allTours.stream()
                 .filter(t -> t.getStars() == null || t.getStars().compareTo(BigDecimal.valueOf(1.0)) > 0)
                 .collect(Collectors.toList());
@@ -273,12 +455,10 @@ public class TourCourseServiceImpl implements TourCourseService {
             int quota = entry.getValue();
             List<Tour> pool = byType.getOrDefault(type, Collections.emptyList());
 
-            // Tier A: stars 4.0 이상 (고품질)
             List<Tour> tierA = pool.stream()
                     .filter(t -> t.getStars() != null && t.getStars().compareTo(BigDecimal.valueOf(4.0)) >= 0)
                     .collect(Collectors.toList());
 
-            // Tier B: stars 1.0 초과 4.0 미만 또는 null(미평가)
             List<Tour> tierB = pool.stream()
                     .filter(t -> t.getStars() == null || (t.getStars().compareTo(BigDecimal.valueOf(1.0)) > 0 && t.getStars().compareTo(BigDecimal.valueOf(4.0)) < 0))
                     .collect(Collectors.toList());
@@ -291,15 +471,12 @@ public class TourCourseServiceImpl implements TourCourseService {
 
             List<Tour> fromA = new ArrayList<>(tierA.subList(0, Math.min(tierASlots, tierA.size())));
             int aShortfall = tierASlots - fromA.size();
-
-            // Tier A 부족분은 Tier B에서 보충
             List<Tour> fromB = new ArrayList<>(tierB.subList(0, Math.min(tierBSlots + aShortfall, tierB.size())));
 
             selected.addAll(fromA);
             selected.addAll(fromB);
         }
 
-        // 유형별 할당량 합계보다 적게 뽑혔을 경우 ATTRACTION으로 보충
         int deficit = totalQuota - selected.size();
         if (deficit > 0) {
             Set<Long> selectedIds = selected.stream()
@@ -317,7 +494,6 @@ public class TourCourseServiceImpl implements TourCourseService {
         return selected;
     }
 
-    // likes 데이터가 있으면 좋아요 많은 순 정렬, 없으면 shuffle
     private void applyOrderStrategy(List<Tour> pool) {
         boolean hasLikesData = pool.stream()
                 .anyMatch(t -> t.getLikes() != null && t.getLikes() > 0);
@@ -330,26 +506,20 @@ public class TourCourseServiceImpl implements TourCourseService {
 
     private String buildPlacesJson(List<Tour> tours) {
         StringBuilder json = new StringBuilder("[");
-
         for (int i = 0; i < tours.size(); i++) {
             Tour tour = tours.get(i);
             json.append("{\"id\":").append(tour.getContentid())
                 .append(",\"t\":\"").append(getPlaceType(tour.getContenttypeid()))
                 .append("\",\"n\":\"").append(escapeJson(tour.getTitle()))
                 .append("\"}");
-            if (i < tours.size() - 1) {
-                json.append(",");
-            }
+            if (i < tours.size() - 1) json.append(",");
         }
-
         json.append("]");
         return json.toString();
     }
 
     private String getPlaceType(Integer contentTypeId) {
-        if (contentTypeId == null) {
-            return "ATTRACTION";
-        }
+        if (contentTypeId == null) return "ATTRACTION";
         try {
             return PlaceType.fromContentTypeId(contentTypeId).name();
         } catch (IllegalArgumentException e) {
@@ -358,9 +528,7 @@ public class TourCourseServiceImpl implements TourCourseService {
     }
 
     private String escapeJson(String value) {
-        if (value == null) {
-            return "";
-        }
+        if (value == null) return "";
         return value.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
@@ -437,21 +605,20 @@ public class TourCourseServiceImpl implements TourCourseService {
             for (TourCourseAiResponseDto.DailyPlan day : aiResponse.getSchedule()) {
                 if (day.getPlaces() != null) {
                     for (TourCourseAiResponseDto.PlaceVisit place : day.getPlaces()) {
-                        TourCourseUserDefinedDetail detail = TourCourseUserDefinedDetail.builder()
+                        details.add(TourCourseUserDefinedDetail.builder()
                                 .tourCourseId(savedCourse.getId())
                                 .date(day.getDate())
                                 .seq(place.getSeq())
                                 .time(place.getTime())
+                                .durationMinutes(place.getDurationMinutes())
                                 .type(place.getType())
                                 .contentId(place.getContentId())
-                                .build();
-                        details.add(detail);
+                                .build());
                     }
                 }
             }
 
             tourCourseUserDefinedDetailRepository.saveAll(details);
-
             log.info("Tour course saved successfully. ID: {}", savedCourse.getId());
             return savedCourse;
 
@@ -459,30 +626,5 @@ public class TourCourseServiceImpl implements TourCourseService {
             log.error("Failed to save tour course: {}", e.getMessage());
             throw new RuntimeException("여행 코스 저장에 실패했습니다", e);
         }
-    }
-
-    private TourCourseGenerateResponseDto buildResponse(Long courseId, TourCourseAiResponseDto aiResponse) {
-        List<TourCourseGenerateResponseDto.DailySchedule> schedules = aiResponse.getSchedule().stream()
-                .map(day -> {
-                    List<TourCourseGenerateResponseDto.PlaceInfo> places = day.getPlaces().stream()
-                            .map(place -> TourCourseGenerateResponseDto.PlaceInfo.builder()
-                                    .seq(place.getSeq())
-                                    .time(place.getTime())
-                                    .type(place.getType())
-                                    .contentId(place.getContentId())
-                                    .build())
-                            .collect(Collectors.toList());
-
-                    return TourCourseGenerateResponseDto.DailySchedule.builder()
-                            .date(day.getDate())
-                            .places(places)
-                            .build();
-                })
-                .collect(Collectors.toList());
-
-        return TourCourseGenerateResponseDto.builder()
-                .courseId(courseId)
-                .schedule(schedules)
-                .build();
     }
 }
