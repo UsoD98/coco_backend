@@ -31,5 +31,6 @@ public class TourCourseAiResponseDto {
         private LocalTime time;
         private String type;
         private Long contentId;
+        private Integer durationMinutes;
     }
 }
