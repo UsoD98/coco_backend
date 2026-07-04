@@ -3,7 +3,7 @@
 > 출처: 『2026 관광데이터 활용 공모전』 백엔드 repo 기준 명세.
 > 본 문서는 프론트엔드 PRD([PRD_FRONT.md](PRD_FRONT.md))가 요구하는 데이터·액션을 **백엔드 관점**으로 재서술한다.
 > 대상 범위: REST API 서버, DB 스키마, 외부 API 연동(한국관광공사 TourAPI, Groq AI), 인증/인가.
-> 버전 0.4.0 · 기준일 2026-07-04.
+> 버전 0.4.2 · 기준일 2026-07-04.
 
 ---
 
@@ -113,8 +113,8 @@ com.eodegano.cocobackend/
 
 ### B-F2. 여행 코스 자동 생성 — 현재 및 목표 진화
 
-**현재 구현 (v0.4.0 — Groq AI + Tier 샘플링 + 장소별 상세 필드)**
-- `POST /api/v1/tour-course` — 인원·기간·이동수단·테마·시군구 입력을 받아 Groq LLM으로 일정별(Day N) 코스 자동 생성.
+**현재 구현 (v0.4.2 — 시군구 복수 선택)**
+- `POST /api/v1/tour-course` — 인원·기간·이동수단·테마·시군구(복수, `sigunguCodes: []`) 입력을 받아 Groq LLM으로 일정별(Day N) 코스 자동 생성.
 - DB에서 지역 POI를 유형별 할당량으로 샘플링 → AI 프롬프트 컨텍스트로 전달.
 - **v0.2.6 샘플링 개선**: Hard exclusion(stars ≤ 1) → Tier A(stars ≥ 4, 70%) / Tier B(stars 2-3·null, 30%) 확률적 Tier 샘플링. likes 있으면 Tier 내 DESC 정렬, 없으면 shuffle. Cold-start(null) → Tier B 편입.
 - **v0.3.1 Rate Limit 개선**: Groq API 429 응답 시 `retry-after` 헤더 기반 대기(기본 20초)로 재시도. 기타 에러와 명시적으로 분리.

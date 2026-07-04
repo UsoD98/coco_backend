@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-04
+
+### Changed
+
+#### AI 코스 생성 요청 `sigunguCode` → `sigunguCodes` (배열) 변경 (CO1)
+
+사용자가 여러 시군구를 대상으로 코스를 생성할 수 있도록 단일 문자열 파라미터를 배열로 변경했다.
+
+- **`TourCourseGenerateRequestDto`**: `String sigunguCode` → `List<String> sigunguCodes`
+- **`TourRepository`**: `findByLDongSignguCdIn(List<String>)` 메서드 추가 (JPQL `IN` 쿼리)
+- **`TourCourseServiceImpl.fetchPlacesData`**: 복수 코드 수신 시 `IN` 쿼리로 여러 지역 POI를 통합 조회, `null`/빈 배열이면 전체 지역 폴백 유지
+
+**요청 예시 (변경 전)**
+```json
+{ "sigunguCode": "35011" }
+```
+**요청 예시 (변경 후)**
+```json
+{ "sigunguCodes": ["35011", "35130"] }
+```
+
+### Files Changed (3 files)
+
+- `dto/TourCourseGenerateRequestDto.java`
+- `repository/TourRepository.java`
+- `service/TourCourseServiceImpl.java`
+
+---
+
 ## [0.4.1] - 2026-07-04
 
 ### Added

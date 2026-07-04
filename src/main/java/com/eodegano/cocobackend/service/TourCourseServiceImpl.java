@@ -75,7 +75,7 @@ public class TourCourseServiceImpl implements TourCourseService {
 
         log.info("Generating tour course for user: {}, request: {}", userId, request);
 
-        String placesData = fetchPlacesData(request.getSigunguCode());
+        String placesData = fetchPlacesData(request.getSigunguCodes());
         String userRequest = buildUserRequest(request);
         TourCourseAiResponseDto aiResponse = groqApiClient.generateTourCourse(placesData, userRequest);
         validateAiResponse(aiResponse, request.getStartDate(), request.getEndDate());
@@ -409,12 +409,12 @@ public class TourCourseServiceImpl implements TourCourseService {
 
     // ── POI 샘플링 ────────────────────────────────────────────────────────────
 
-    private String fetchPlacesData(String sigunguCode) {
-        log.info("Fetching places data for sigunguCode: {}", sigunguCode);
+    private String fetchPlacesData(List<String> sigunguCodes) {
+        log.info("Fetching places data for sigunguCodes: {}", sigunguCodes);
 
-        List<Tour> allTours = (sigunguCode == null || sigunguCode.isBlank())
+        List<Tour> allTours = (sigunguCodes == null || sigunguCodes.isEmpty())
                 ? tourRepository.findAll()
-                : tourRepository.findByLDongSignguCd(sigunguCode);
+                : tourRepository.findByLDongSignguCdIn(sigunguCodes);
 
         if (allTours.isEmpty()) {
             throw new IllegalArgumentException("해당 지역의 여행지 데이터가 없습니다");

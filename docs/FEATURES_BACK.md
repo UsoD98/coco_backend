@@ -2,7 +2,7 @@
 
 > 목적: 백엔드가 구현해야 할 전체 기능을 도메인 영역별로 분해한 상위 문서.
 > "무엇이 필요한가"를 API·서비스·인프라 단위로 나열하며, 상세 동작 규칙·스키마·검증 조건은 다음 단계인 **API 명세서**로 위임한다.
-> 출처: [PRD_BACK.md](PRD_BACK.md) · [PRD_FRONT.md](PRD_FRONT.md) · 버전 0.4.0 · 기준일 2026-07-04.
+> 출처: [PRD_BACK.md](PRD_BACK.md) · [PRD_FRONT.md](PRD_FRONT.md) · 버전 0.4.2 · 기준일 2026-07-04.
 
 ---
 
@@ -191,7 +191,7 @@
 ## 4. AI 여행 코스 생성 (Course Generation)
 
 ### CO1. AI 코스 생성 (Groq API — 현재)
-- **설명**: 인원·기간·이동수단·테마·시군구를 입력받아 DB POI를 유형별 할당량으로 샘플링 → Groq LLM 프롬프트 구성 → Day별 일정 생성 → 검증 후 `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장.
+- **설명**: 인원·기간·이동수단·테마·시군구(`sigunguCodes`, 복수 선택)를 입력받아 DB POI를 유형별 할당량으로 샘플링 → Groq LLM 프롬프트 구성 → Day별 일정 생성 → 검증 후 `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장.
   - **샘플링 알고리즘 (v0.2.6 개선)**: Hard exclusion(stars ≤ 1 제거) → Tier A(stars ≥ 4, 70% 슬롯) / Tier B(stars 2-3 또는 null, 30% 슬롯) 확률적 샘플링. Tier A 부족분은 Tier B로 보충. Cold-start(null stars) → Tier B 편입. likes 데이터 있으면 각 Tier 내 likes DESC 정렬, 없으면 shuffle.
   - **Rate Limit 재시도 (v0.3.1 개선)**: `GroqApiClient`에서 HTTP 429 응답을 `HttpClientErrorException`으로 명시 감지. `retry-after` 헤더 값(초→ms 변환) 우선 대기, 헤더 없으면 20초 기본 대기 후 재시도. 기타 에러(네트워크·5xx 등)는 기존대로 1초 대기. 최대 재시도(3회) 소진 시 rate limit 전용 에러 메시지 반환.
   - **장소별 상세 필드 (v0.4.0 추가)**: AI가 장소별 `durationMinutes`(예상 소요시간)를 추정해 응답에 포함. 응답에 `thumbnailImg`(tour.firstimage), `operatingHours`(type별 DB 조회), `cost`(DB 우선 → type 기본값 fallback)도 포함. 상세 내용은 CHANGELOG v0.4.0 참조.

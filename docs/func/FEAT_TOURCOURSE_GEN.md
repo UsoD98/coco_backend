@@ -113,7 +113,7 @@ Request Body:
   "endDate": "2026-06-03",
   "transport": "CAR",
   "theme": ["자연", "맛집"],
-  "sigunguCode": "35011"
+  "sigunguCodes": ["35011", "35130"]
 }
 
 Response (200 OK):
@@ -142,7 +142,7 @@ Response (200 OK):
 
 **Data Flow**
 1. 사용자 요청 → Controller (Validation)
-2. Service → DB 조회 (sigunguCode 기준 또는 전체)
+2. Service → DB 조회 (sigunguCodes IN 쿼리 기준, 빈 배열이면 전체)
 3. JSON 변환 (장소 데이터: contentId, type, title, 좌표, 운영시간 등)
 4. Groq API 호출 (System Prompt + User Request)
 5. AI 응답 검증 (contentId 존재, 날짜 범위, 타입)
