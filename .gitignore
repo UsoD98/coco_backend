@@ -40,3 +40,6 @@ out/
 .env
 
 ### Cluade Code Md file ###
+
+### Claude Code local settings (개인별 권한 설정, 공유 불필요) ###
+.claude/settings.local.json

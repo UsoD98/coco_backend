@@ -4,7 +4,9 @@
 > 본 문서는 프론트엔드 PRD([PRD_FRONT.md](PRD_FRONT.md))와 백엔드 PRD([PRD_BACK.md](PRD_BACK.md))를 통합한 **전체 서비스 기준 PRD**다.
 > FE·BE 양측이 공유하는 제품 비전·핵심 기능·화면-API 계약·미결 사항을 한 곳에 정리한다.
 > 화면 인벤토리(§8)는 **인터랙티브 화면 설계 프로토타입**(`경북 CoCo 화면 설계 (standalone).html`)과 정합한다. 시각 설계 SoT는 해당 프로토타입 + [DESIGN.md](../DESIGN.md) 토큰이다.
-> 버전 0.3 · 기준일 2026-06-06.
+> 버전 0.5.0 · 기준일 2026-08-08.
+
+> **⚠️ v0.5.0 아키텍처 전환 (공모전 의무사항)**: 관광 정보를 로컬 DB에 적재해 사용하는 것이 규정 위반으로 확인되어, 백엔드는 TourAPI를 요청 시점에 라이브 호출(Caffeine 캐시 TTL 6h 경유)하는 구조로 전환했다. `tour`와 유형별 상세 테이블은 DB에서 제거되었고, 사용자 참여로 쌓이는 별점(`stars`)·좋아요(`likes`)만 신규 `poi_rating` 테이블로 분리 보존한다. 상세: [PRD_BACK.md](PRD_BACK.md).
 
 ---
 
@@ -77,11 +79,11 @@
 
 - **FE 역할**: 플래너 워크스페이스(지도/리스트/코스 패널/예산 대시보드) 렌더링, POI 인라인 금액 수정.
 - **BE 역할**:
-  - **현재**: Groq AI로 Day별 여행 코스 자동 생성. DB POI를 유형별 할당량으로 샘플링해 LLM 프롬프트 컨텍스트로 제공.
-  - **목표**: `tour.stars`·`tour.likes` 기반 스코어링 알고리즘으로 LLM 없이 코스 생성. (`§12 코스 생성 진화 로드맵` 참고)
-  - POI 상세(설명·운영시간·요금) 통합 응답.
-  - 음식점 평균 객단가(`food_avg_price.lclsSystm3` 조인)·숙박 요금 기본값 제공.
-  - 코스 좌표 열에서 이동수단(`TransportType`)별 교통비 추정.
+  - **현재**: Groq AI로 Day별 여행 코스 자동 생성. TourAPI 라이브 조회(Caffeine 캐시 경유) 결과의 POI를 유형별 할당량으로 샘플링해 LLM 프롬프트 컨텍스트로 제공 (v0.5.0부터 로컬 DB 스캔 아님).
+  - **목표**: `poi_rating.stars`·`poi_rating.likes` 기반 스코어링 알고리즘으로 LLM 없이 코스 생성. (`§12 코스 생성 진화 로드맵` 참고)
+  - POI 상세(설명·운영시간·요금) 통합 응답 — v0.5.0부터 TourAPI 라이브 조회(캐시 경유) 기반.
+  - 음식점 평균 객단가·숙박 요금 기본값 제공. ⚠️ 근거였던 `food_avg_price`/`accommodation_detail_info` 테이블이 v0.5.0에서 제거되어 재설계 필요 (OQ17 하위 BOQ14, [PRD_BACK.md](PRD_BACK.md)).
+  - 코스 좌표 열에서 이동수단(`TransportType`)별 교통비 추정 (좌표는 TourAPI 라이브 응답 기준).
 - **연결**: S2 플래너 워크스페이스, S2a POI 상세 드로어.
 
 ### F3. One-Click Share — 카카오톡 기반 비용 분담 공유
@@ -107,20 +109,25 @@
 
 ## 6. 데이터 파이프라인
 
+> **v0.5.0부터 관광 정보 로컬 DB 적재 폐지** (공모전 의무사항). 매 요청 TourAPI를 라이브 호출하고 Caffeine 캐시(TTL 6h)로 응답 속도·호출한도를 보호한다.
+
 ```
 [한국관광공사 TourAPI]
-    ↓ 월 1회 배치 수집 (areaBasedList + detailCommon + detailIntro + detailInfo)
+    ↓ 요청 시점 라이브 호출 (areaBasedList2 + detailCommon2 + detailIntro2 + detailInfo2)
     ↓ areaCode=35 (경상북도), contentTypeId: 12/14/15/28/32/38/39
-[백엔드 DB (MariaDB)]
-    tour (stars, likes 포함)
-    attraction / culture / event / leports / accommodation / shopping / food
-    accommodation_detail_info / food_avg_price (lclsSystm3 기준) / detail_common / detail_info
+[Caffeine 캐시 (TTL 6h, 인프로세스, 비영속)]
+    지역 POI 후보 리스트 캐시 (시군구 조합 키)
+    POI 개별 상세 캐시 (contentId 키 — 공통정보·소개정보·요금/운영시간)
            │
-           ├─ [현재] Groq AI 프롬프트 컨텍스트 (유형별 할당량 무작위 샘플링)
-           │         ↓ Groq LLM → Day별 일정 JSON → 검증 → DB 저장
+           ├─ [현재] Groq AI 프롬프트 컨텍스트 (유형별 할당량 샘플링, poi_rating.stars/likes로 Tier 샘플링)
+           │         ↓ Groq LLM → Day별 일정 JSON → 캐시된 후보 리스트와 대조 검증 → DB 저장
            │
-           └─ [목표] stars·likes 스코어링 알고리즘 → Day별 일정 직접 생성 → DB 저장
-[tour_course_user_defined + tour_course_user_defined_detail]
+           └─ [목표] poi_rating.stars·likes 스코어링 알고리즘 → Day별 일정 직접 생성 → DB 저장
+
+[백엔드 DB (MariaDB) — 관광 정보 미저장, 아래만 보존]
+    poi_rating (contentId PK, stars, likes — TourAPI가 제공 안 하는 앱 자체 데이터)
+    tour_course_user_defined + tour_course_user_defined_detail (contentId는 단순 참조 컬럼)
+    user_poi_like / mst_sigungu / mst_theme (기준정보)
     ↓ 코스 목록·상세 API
 [FE — 플래너·컬렉션]
 ```
@@ -133,10 +140,10 @@
 [FE — React/TypeScript]          [BE — Spring Boot 4.0 / Java 25]
   Vite + Zustand + Axios    ←──────  REST API (/api/v1/**)
   카카오맵 SDK                          JWT 인증 (Stateless)
-  카카오 로그인 SDK                      MariaDB (JPA + MyBatis)
-  카카오 공유 SDK             ←────────  Groq API Client (현재, 점진적 제거 목표)
-                                         TourAPI Client
-                                         DataMigration (관리자)
+  카카오 로그인 SDK                      MariaDB (JPA + MyBatis) — 유저/코스/평점만, 관광정보 미저장
+  카카오 공유 SDK             ←────────  Caffeine 캐시 (TourAPI 응답, TTL 6h)
+                                         Groq API Client (현재, 점진적 제거 목표)
+                                         TourAPI Client (v0.5.0부터 라이브 조회 전용, 배치 마이그레이션 제거)
 ```
 
 ---
@@ -244,7 +251,8 @@
 | OQ13 | **공유 스키마**: DDL v2에서 `share_token`·`is_public` 제거됨. 별도 `share_snapshot` 테이블 vs. 컬럼 재추가 결정 필요 | 🔶 |
 | OQ14 | **코스 제목 저장**: `tour_course_user_defined`에 `title` 컬럼 없음. 컬렉션 표시를 위해 추가 여부 결정 필요 | 🔶 |
 | OQ15 | **POI별 예산 오버라이드 저장**: `tour_course_user_defined_detail`에 `budget_override` 컬럼 없음. FE 인라인 수정값 영속화 여부 결정 필요 | 🔶 |
-| OQ16 | **`stars`·`likes` 데이터 수집 방법**: 앱 내 사용자 참여(별점/추천 UI) vs. 외부 소스 매핑 vs. 초기 수동 입력 결정 필요 | 🔶 |
+| OQ16 | **`stars`·`likes` 데이터 수집 방법**: 앱 내 사용자 참여(별점/추천 UI) vs. 외부 소스 매핑 vs. 초기 수동 입력 결정 필요. v0.5.0부터 저장 위치는 `poi_rating` 테이블 | 🔶 |
+| OQ17 | **관광 정보 로컬 DB 미저장 전환 (v0.5.0)**: ✅ **확정·적용 완료**: 공모전 규정에 따라 TourAPI 라이브 호출 + Caffeine 캐시(TTL 6h) 구조로 전환. `food_avg_price`·`accommodation_detail_info` 소실에 따른 BU1/BU2 예산 메타데이터 재설계는 미확정 (PRD_BACK.md BOQ14) | ✅ (하위 BOQ14는 🔶) |
 
 ---
 
@@ -255,8 +263,9 @@
 | 단계 | 버전 | 방식 | 핵심 변경 |
 | --- | --- | --- | --- |
 | **Phase 1 — 현재** | v0.2 | Groq AI 기반 | DB POI 무작위 샘플링 → LLM 프롬프트 → Day별 코스 반환 |
-| **Phase 2 — 중기** | v0.3 | stars·likes 가중치 + Groq 보조 | 무작위 샘플링 → `stars`·`likes` 상위 우선 선택. LLM은 여전히 일정 조합 담당 |
-| **Phase 3 — 최종** | v1.0 | 순수 알고리즘 추천 | Groq 완전 제거. 인원버킷·테마·이동수단·`stars`·`likes`·사용자 `travel_type`으로 스코어 계산 → 유형별 할당 규칙 엔진으로 Day별 코스 직접 조합 |
+| **Phase 1.5 — 현재** | v0.5.0 | Groq AI 기반, 데이터 소스 전환 | POI 샘플링 소스가 로컬 DB → TourAPI 라이브 조회(Caffeine 캐시 TTL 6h)로 변경. 알고리즘 로직 자체는 동일 |
+| **Phase 2 — 중기** | v0.3+ | stars·likes 가중치 + Groq 보조 | 라이브 조회 결과에서 `poi_rating.stars`·`likes` 상위 우선 선택. LLM은 여전히 일정 조합 담당 |
+| **Phase 3 — 최종** | v1.0 | 순수 알고리즘 추천 | Groq 완전 제거. 인원버킷·테마·이동수단·`poi_rating.stars`·`likes`·사용자 `travel_type`으로 스코어 계산 → 유형별 할당 규칙 엔진으로 Day별 코스 직접 조합 |
 
 **Phase 3 입력값 → 스코어 계산 예시:**
 
@@ -293,10 +302,11 @@ Day별 배치: 유형별 할당량(숙박1·식사2·관광N·문화M) 규칙 �
 ### 백엔드 구현 완료
 
 - JWT 기반 로컬 인증/인가 (로그인·로그아웃·토큰 갱신·회원 CRUD)
-- TourAPI 데이터 수집·DB 적재
+- TourAPI 라이브 연동 (`TourApiClient`) — v0.5.0부터 DB 적재 배치는 폐지, 요청 시점 라이브 호출 전용
 - Groq AI 여행 코스 생성 (`POST /api/v1/tour-course`) — 비로그인 허용
 - `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장
-- `tour.stars`·`tour.likes` 컬럼 스키마 준비 (데이터 수집 예정)
+- `poi_rating.stars`·`poi_rating.likes` 컬럼 스키마 준비 (v0.5.0부터 `tour` 테이블에서 분리, 285개 stars 초기값 이관 완료)
+- **DB 마이그레이션 완료 (2026-08-08)**: `tour`/`attraction`/`culture`/`event`/`tour_course`/`leports`/`accommodation`/`shopping`/`food`/`detail_common`/`detail_info`/`accommodation_detail_info`/`tour_course_detail_info`/`food_avg_price` 14개 테이블 백업 후 DROP, `poi_rating` 신설
 
 ### 백엔드 구현 필요 (MVP 우선순위)
 
