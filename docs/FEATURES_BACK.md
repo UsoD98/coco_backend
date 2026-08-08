@@ -67,6 +67,14 @@
 - **FE 의존**: 전체 화면.
 - **가치**: FE-BE 통신의 전제.
 
+### INF5. CI/CD 배포 파이프라인 (GitHub Actions + systemd)
+- **설명**: 오라클 클라우드 Free Tier 백엔드 인스턴스(Ubuntu)에 대한 자동 배포. `main` push 시 Gradle 빌드 → SCP로 jar 전송 → 서버 `.env` 재생성 → `systemctl restart`.
+- **상태**: DB 서버와 동일 VCN 내 프라이빗 IP로 통신 (공인 IP 미노출). 앱 런타임 시크릿은 GitHub Secrets를 원본으로 삼아 배포마다 서버 `.env`(`chmod 600`)를 덮어씀.
+- **MVP**: ✅
+- **구현 상태**: ✅ (`.github/workflows/deploy.yml`, `deploy/cocobackend.service`)
+- **FE 의존**: 없음.
+- **가치**: 수동 배포·서버 SSH 접속 없이 push만으로 반영, 시크릿 교체 시에도 서버 접속 불필요.
+
 ---
 
 ## 1. 인증 (Authentication)
