@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-08
+
+### Added
+
+#### GitHub Actions + systemd 기반 CI/CD 배포 파이프라인
+
+오라클 클라우드 Free Tier 백엔드 인스턴스(Ubuntu, E2.1.Micro)에 대한 자동 배포 파이프라인을 구축했다. DB 서버와는 동일 VCN 내 프라이빗 IP로 통신하며, 공인 IP·별도 인증서 교환 없이 OCI Security List + 계정 기반 인증만으로 연결한다.
+
+- `main` 브랜치 push 시 Gradle 빌드 → jar를 SCP로 서버 전송 → 서버의 `.env`를 GitHub Secrets 값으로 재생성 → `systemctl restart`로 재기동
+- 앱 런타임 시크릿(`DB_HOST`·`DB_PASSWORD`·`JWT_SECRET` 등)은 서버에 수동으로 두지 않고 GitHub Secrets를 원본(source of truth)으로 삼아 배포 시마다 서버 `.env`(`chmod 600`)를 덮어씀 — 값 교체 시 서버 SSH 접속 없이 Secrets만 수정하면 반영됨
+- 서버 SSH 접속용 키는 인스턴스 관리용 오라클 발급 키와 분리된 전용 배포 키(ed25519) 사용
+- 1GB RAM 환경 고려해 JVM 힙 제한(`-Xmx400m`) 및 스왑 2GB 추가
+
+### Files Created (2 files)
+
+- `.github/workflows/deploy.yml` — CI/CD 워크플로우 (build → scp jar → write env → restart)
+- `deploy/cocobackend.service` — systemd 유닛 템플릿
+
 ## [0.5.1] - 2026-08-08
 
 ### Added
