@@ -25,8 +25,8 @@ public class PoiController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PoiCurationResponseDto>> getPoiList(
-            @RequestParam(required = false) String sigunguCode,
-            @RequestParam(required = false) Integer peopleCount,
+            @RequestParam(required = true) String sigunguCode,
+            @RequestParam(required = true) Integer peopleCount,
             @RequestParam(required = false) Integer contentTypeId) {
         PoiCurationResponseDto result = poiCurationService.getPoiList(sigunguCode, peopleCount, contentTypeId);
         return ResponseEntity.ok(ApiResponse.ok("POI 목록을 조회했습니다.", result));

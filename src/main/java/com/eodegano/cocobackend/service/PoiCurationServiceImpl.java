@@ -31,7 +31,7 @@ public class PoiCurationServiceImpl implements PoiCurationService {
         List<PoiSummary> filtered = tourLiveDataService.getAllCandidates().stream()
                 .filter(p -> normalizedSigunguCode.equals(p.lDongSignguCd()))
                 .filter(p -> contentTypeId == null || contentTypeId.equals(p.contentTypeId()))
-                .collect(Collectors.toList());
+                .toList();
 
         if (filtered.isEmpty()) {
             return PoiCurationResponseDto.builder()
