@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `theme`: 파라미터 자체 미수신 — 매핑 설계 없음, 추후 결정 필요 (`docs/PRD_BACK.md` BOQ14)
 - `avgPrice`: 항상 `null` 반환 — 근거 테이블(`food_avg_price`) 소실로 데이터 소스 미정, BU1/BOQ14 확정 후 `contentTypeId=39`(음식점) 조인 로직 추가 예정
 
+### Fixed
+
+#### `GlobalExceptionHandler` — 필수 쿼리 파라미터 누락 시 400 응답
+
+`GET /api/v1/poi`의 `sigunguCode`/`peopleCount`처럼 `@RequestParam(required = true)`인 파라미터가 아예 누락되면 Spring이 던지는 `MissingServletRequestParameterException`을 기존에는 전용 핸들러가 없어 최종 `Exception` 핸들러가 잡아 500으로 응답하고 있었다. `MissingServletRequestParameterException` 전용 핸들러를 추가해 400 + `"필수 파라미터 'xxx'가 누락되었습니다."` 메시지로 응답하도록 수정.
+
 ### Files Created (4 files)
 
 - `dto/PoiCurationResponseDto.java`
@@ -33,9 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `service/PoiCurationService.java`
 - `service/PoiCurationServiceImpl.java`
 
-### Files Changed (1 file)
+### Files Changed (2 files)
 
 - `controller/PoiController.java` — `GET /api/v1/poi` 엔드포인트 추가
+- `exception/GlobalExceptionHandler.java` — `MissingServletRequestParameterException` 핸들러 추가
 
 ## [0.5.0] - 2026-08-08
 
