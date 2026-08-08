@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-08
+
+### 배경
+
+공모전 의무사항에 따라 한국관광공사 TourAPI 데이터를 로컬 DB에 적재해 사용하는 방식이 금지되어, 관광 정보 조회를 요청 시점 라이브 호출로 전환했다. 응답 속도·TourAPI 일일 호출한도를 보호하기 위해 Caffeine 인메모리 캐시(TTL 6시간)를 도입했다.
+
+### Added
+
+#### `TourLiveDataService` — TourAPI 라이브 조회 + 캐시 계층
+
+- `getAllCandidates()`: `TourApiClient.areaBasedListAll`로 경북 전체 POI를 라이브 조회, `poiCandidates` 캐시(TTL 6h, 단일 엔트리)에 보관. 지역(시군구) 필터링은 캐시된 결과를 애플리케이션 메모리에서 처리
+- `getDetail(contentId, contentTypeId)`: `TourApiClient.detailIntro`로 타입별 운영시간·비용 원천 필드(usetime/usetimeculture·usefee/usetimefestival/usetimeleports/opentime/opentimefood)를 추출, `poiDetail` 캐시(TTL 6h, contentId 키)에 보관
+- `PoiSummary`/`PoiDetail` 레코드 신규 (`service` 패키지)
+
+#### `PoiRating` 엔티티 — 별점·좋아요 전용 테이블 (`poi_rating`)
+
+- `contentId`(PK)·`stars`·`likes` 컬럼만 보유. TourAPI가 제공하지 않는 앱 자체 데이터만 분리 보존
+- 좋아요 액션 시 on-demand 생성 (`PoiRating.createWithLike`), TourAPI 라이브 존재 재검증 없음 — 프론트가 이미 API로 확인한 contentId만 전달한다고 신뢰
+- `PoiRatingRepository`: `findByContentidIn`, 원자적 `incrementLikes`/`decrementLikes` (기존 `TourRepository`와 동일 패턴)
+
+#### `CacheConfig` — Caffeine 캐시 설정
+
+- `poiCandidates`, `poiDetail` 2개 캐시, 둘 다 `expireAfterWrite(6h)` / `maximumSize(2000)`
+- Redis 대신 Caffeine 채택: 별도 프로세스 없이 기존 JVM 힙 안에서 동작 — 1GB 메모리 프리티어 서버에서 별도 인프라 오버헤드 회피
+- `build.gradle`에 `spring-boot-starter-cache`, `com.github.ben-manes.caffeine:caffeine` 추가
+
+### Removed
+
+#### 관광 정보 로컬 DB 저장 폐지 — 엔티티·Repository 14종 삭제
+
+`Tour`, `DetailCommon`, `DetailInfo`, `Attraction`, `Culture`, `Event`, `TourCourse`, `TourCourseDetailInfo`, `Leports`, `Accommodation`, `AccommodationDetailInfo`, `Shopping`, `Food`, `FoodAvgPrice` 및 각 Repository. 전부 `contentid`를 평범한 컬럼으로만 매칭하는 1:1 컴패니언 테이블이라 JPA 연관관계 없이 안전하게 제거 가능했음.
+
+#### `DataMigrationService` / `DataMigrationController` 삭제
+
+TourAPI → 로컬 DB 일괄 적재 배치 자체가 공모전 규정 위반이라 전체 삭제. `TourApiClient`(RestClient 래퍼)는 유지하고 `TourLiveDataService`의 라이브 조회 기반으로 재사용.
+
+#### `SecurityConfig`에서 `/api/admin/migration/**` permitAll 규칙 제거
+
+컨트롤러 자체가 사라졌으므로 규칙도 함께 정리.
+
+### Changed
+
+#### `TourCourseServiceImpl` — 로컬 DB 스캔 → 라이브 조회+캐시 기반 재작성
+
+- `fetchPlacesData`: `tourRepository.findByLDongSignguCdIn` → `TourLiveDataService.getAllCandidates()` + 시군구 메모리 필터링
+- 별점/좋아요 티어 샘플링(`selectByTypeQuota`): `Tour` 엔티티 → `PoiRatingRepository`로 조회한 값을 합친 `RatedPoi` 레코드 기준으로 동일 알고리즘 유지 (Tier A/B 70/30 분할·likes 정렬 로직 변경 없음)
+- AI 응답 contentId 검증(`validateAiResponse`): `tourRepository.findByContentidIn` → 요청 내에서 이미 확보한 라이브 후보 리스트(캐시)와 메모리 대조로 변경, 추가 DB/API 호출 없음
+- 코스 응답 보강(`buildGenerateResponse`/`buildCourseResponse`): 썸네일·운영시간·비용·장소명을 `Tour`/type별 detail 테이블 재조회 → `TourLiveDataService`의 캐시된 `PoiSummary`/`PoiDetail`로 조립
+
+#### `PoiLikeServiceImpl` — `PoiRating` 기반 재작성
+
+- `TourRepository` 의존 제거, `PoiRatingRepository`로 좋아요 카운트 증감
+- "존재하지 않는 POI → 404" 검증 제거 (근거였던 로컬 `Tour` 테이블 소실)
+
+### DB 마이그레이션 (2026-08-08 수행)
+
+- 기존 14개 테이블(`tour` 포함) 전체를 `mysqldump`로 백업 후 DROP (FK 의존 순서 준수)
+- `poi_rating` 테이블 신설, 기존 `tour.stars` 285개 초기값 이관 완료 (likes는 전부 0이라 이관 대상 없음)
+- `mst_sigungu`/`mst_theme`(기준정보), `user`/`refresh_token`/`tour_course_user_defined`/`tour_course_user_defined_detail`/`user_poi_like`는 변경 없이 유지
+
+### Verified
+
+- `./gradlew test` 전체 통과
+- 실 DB 연결 기동 → Hibernate `ddl-auto: validate` 스키마 검증 통과
+- `POST /api/v1/tour-course` 실제 호출로 TourAPI 라이브 조회 → Groq AI 생성 → 검증 → 저장까지 200 응답 확인 (썸네일·운영시간·비용 필드 정상)
+- `GET /{courseId}/view` 공개 조회 정상 (캐시된 장소명 포함)
+
+### Known Gaps
+
+- `BU1`(음식점 평균 객단가)·`BU2`(숙박 인원별 분류): 근거였던 `food_avg_price`·`accommodation_detail_info` 테이블 소실로 재설계 필요 — `docs/PRD_BACK.md` BOQ14로 추적
+
+### Files Changed (44 files)
+
+- `build.gradle`
+- `docs/CLAUDE.md`, `docs/PRD.md`, `docs/PRD_BACK.md`, `docs/FEATURES_BACK.md`
+- `config/CacheConfig.java` (신규), `config/SecurityConfig.java`
+- `domain/PoiRating.java` (신규), `repository/PoiRatingRepository.java` (신규)
+- `service/TourLiveDataService.java`, `service/PoiSummary.java`, `service/PoiDetail.java` (신규)
+- `service/TourCourseServiceImpl.java`, `service/PoiLikeServiceImpl.java`
+- `domain/`·`repository/` 14종 삭제 (Tour/Attraction/Culture/Event/TourCourse/TourCourseDetailInfo/Leports/Accommodation/AccommodationDetailInfo/Shopping/Food/FoodAvgPrice/DetailCommon/DetailInfo)
+- `dataMig/service/DataMigrationService.java`, `dataMig/controller/DataMigrationController.java` 삭제
+
+---
+
 ## [0.4.2] - 2026-07-04
 
 ### Changed
