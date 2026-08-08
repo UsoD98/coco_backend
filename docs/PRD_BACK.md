@@ -280,7 +280,7 @@ com.eodegano.cocobackend/
 
 | 메서드 | 경로 | 설명 | 구현 |
 | --- | --- | --- | --- |
-| GET | `/` | 큐레이션 POI 목록 (지역·인원버킷·테마) | 🔜 |
+| GET | `/` | 큐레이션 POI 목록 (지역·유형 필터만 구현, 인원버킷·테마·avgPrice는 보류 — BOQ14) | 🔧 |
 | GET | `/{contentId}` | POI 상세 통합 조회 | 🔜 |
 | POST | `/{contentId}/like` | POI 좋아요 토글 (인증 필요) | ✅ |
 
@@ -309,7 +309,9 @@ com.eodegano.cocobackend/
 - **BOQ11. 공유 기능 스키마** — ✅ **확정 (v0.2.6)**: `share_snapshot` 테이블·`share_token` 컬럼 미추가. FE가 카카오 SDK로 courseId 기반 딥링크를 생성하고, 수신자는 `GET /{courseId}/view` 공개 API로 조회하는 방식으로 결정.
 - **BOQ12. `stars`·`likes` 데이터 수집 방법** — 부분 확정: `likes`는 PO5 좋아요 토글 API(v0.2.6)로 앱 내 수집. `stars`는 AI 검색 기반 수동 입력 예정 (크롤링 방법 미확정). v0.5.0부터 저장 위치는 `poi_rating` 테이블.
 - **BOQ13. Caffeine 캐시 TTL** — ✅ **확정 (v0.5.0)**: 지역 POI 후보 리스트·POI 개별 상세 모두 TTL 6시간. 소규모 트래픽 특성상 신선도·호출량 절감 사이 타협점으로 결정. Redis 대신 Caffeine 채택 이유: 1GB 메모리 프리티어 서버에서 별도 프로세스 오버헤드를 피하기 위함.
-- **BOQ14. 예산 메타데이터 근거 테이블 소실** — 🔶 **v0.5.0 신규**: `food_avg_price`(BU1 음식점 평균 객단가), `accommodation_detail_info`(BU2 숙박 인원별 분류) 테이블이 로컬 DB 미저장 원칙에 따라 제거됨. TourAPI 라이브 응답(`detailIntro2`)에서 대체 가능한 필드가 있는지, 없다면 이 기능 자체를 축소/보류할지 결정 필요. 상세: [FEATURES_BACK.md BU1/BU2](FEATURES_BACK.md).
+- **BOQ14. 예산 메타데이터 근거 테이블 소실** — 🔶 **v0.5.0 신규**: `food_avg_price`(BU1 음식점 평균 객단가) 테이블이 로컬 DB 미저장 원칙에 따라 제거됨. TourAPI 라이브 응답(`detailIntro2`)에서 대체 가능한 필드가 있는지, 없다면 이 기능 자체를 축소/보류할지 결정 필요. 상세: [FEATURES_BACK.md BU1](FEATURES_BACK.md). **BU2(숙박 인원별 분류)는 2026-08-08 기획 결정으로 스코프 아웃 확정** — `peopleCount`는 필수 입력 파라미터로만 받고 필터링에는 사용하지 않음.
+  - **TODO**: `GET /api/v1/poi`(`PoiCurationServiceImpl`)는 이 결정 전까지 `avgPrice`를 항상 `null`로 반환하도록 임시 구현됨. 데이터 소스 확정 후 `contentTypeId=39`(음식점) 케이스에 실제 조인 로직 추가 필요.
+  - **TODO**: 같은 API의 `theme`(테마 필터링) 파라미터는 데이터 소스·매핑 설계가 없어 현재 미구현 상태로 보류됨 (컨트롤러에서 파라미터 자체를 받지 않음). 설계 확정 후 추가 필요.
 
 ---
 

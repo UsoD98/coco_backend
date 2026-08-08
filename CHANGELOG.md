@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-08
+
+### Added
+
+#### `GET /api/v1/poi` — 큐레이션 POI 목록 조회 (GBC017)
+
+지역(`sigunguCode`)·콘텐츠 유형(`contentTypeId`) 필터로 TourAPI 라이브 조회 결과(`TourLiveDataService.getAllCandidates()`, 캐시 경유)를 필터링해 반환한다.
+
+- `sigunguCode`(필수): FE가 사용하는 5자리 코드(`"35130"` = areaCode 35 + sigunguCode)를 `lDongSignguCd`(3자리)와 매칭하기 위해 `35` 접두를 제거해 정규화 (`PoiCurationServiceImpl.normalizeSigunguCode`)
+- `contentTypeId`(선택): `PoiSummary.contentTypeId` 기준 필터
+- 매칭 결과가 없으면 `available: false` + `items: []` 반환
+- `PoiCurationService`/`PoiCurationServiceImpl` 신규, `PoiController`에 `@GetMapping` 추가
+- `PoiCurationResponseDto`(`available`, `items`), `PoiCurationItemDto`(`contentId`·`contentTypeId`·`title`·`mapx`·`mapy`·`thumbnail`·`avgPrice`) 신규
+
+**보류 (스펙 대비 축소 구현)**
+- `peopleCount`: 필수 파라미터로만 수신, 필터링에는 미사용 — 숙박 인원별 분류(BU2)는 2026-08-08 기획 결정으로 스코프 아웃 확정 (`docs/FEATURES_BACK.md` BU2)
+- `theme`: 파라미터 자체 미수신 — 매핑 설계 없음, 추후 결정 필요 (`docs/PRD_BACK.md` BOQ14)
+- `avgPrice`: 항상 `null` 반환 — 근거 테이블(`food_avg_price`) 소실로 데이터 소스 미정, BU1/BOQ14 확정 후 `contentTypeId=39`(음식점) 조인 로직 추가 예정
+
+### Files Created (4 files)
+
+- `dto/PoiCurationResponseDto.java`
+- `dto/PoiCurationItemDto.java`
+- `service/PoiCurationService.java`
+- `service/PoiCurationServiceImpl.java`
+
+### Files Changed (1 file)
+
+- `controller/PoiController.java` — `GET /api/v1/poi` 엔드포인트 추가
+
 ## [0.5.0] - 2026-08-08
 
 ### 배경
