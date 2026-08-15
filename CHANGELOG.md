@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-08-15
+
+### Fixed
+
+#### 서비스에서 던진 AccessDeniedException이 403 대신 500으로 응답되던 문제 수정
+
+`TourCourseServiceImpl`의 소유권 검증 5곳(`getCourseDetail`·`deleteCourse`·`assignCourse`·`updateCourseTitle`·`updateCourse`)에서 던지는 `AccessDeniedException`이 `GlobalExceptionHandler`에 전용 핸들러 없이 제네릭 `RuntimeException` 핸들러로 흡수되어 403이 아닌 500 "서버 오류가 발생했습니다"로 응답되고 있었다.
+
+- 원인: `JwtAccessDeniedHandler`(`SecurityConfig`의 `exceptionHandling().accessDeniedHandler(...)`)는 `ExceptionTranslationFilter`가 필터 체인 밖으로 전파된 `AccessDeniedException`만 캐치하는데, 컨트롤러/서비스에서 애플리케이션 코드로 직접 던진 예외는 `DispatcherServlet` 내부에서 `HandlerExceptionResolver`(`@ExceptionHandler` 매칭)가 먼저 소비해버려 필터까지 전파되지 않음 — 즉 Security 필터 자체의 인가 실패(예: `hasRole` 불일치)에서 던져지는 것과, 애플리케이션 코드가 직접 던지는 것은 처리 경로가 다름
+- `GlobalExceptionHandler`에 `@ExceptionHandler(AccessDeniedException.class)` 추가, `JwtAccessDeniedHandler`와 동일한 응답 형태(`ApiResponse.of(403, msg, null)`)로 통일
+
+### Testing
+
+- `TourCourseControllerTest`에 "본인 코스가 아님 → 403" 케이스 추가 — 이 예외는 `@WebMvcTest`가 로드하는 `GlobalExceptionHandler`가 처리하므로 `addFilters=false`(Security 필터 생략)와 무관하게 슬라이스 테스트에서도 검증 가능해짐. 기존 테스트 클래스 상단 주석(403은 서비스 단위 테스트에서만 검증 가능하다는 설명)도 함께 정정
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/exception/GlobalExceptionHandler.java`
+- `src/test/java/com/eodegano/cocobackend/controller/TourCourseControllerTest.java`
+
+## [0.5.5] - 2026-08-15
+
+### Added
+
+#### `PATCH /api/v1/tour-course/{courseId}` — 코스 일정 수정 (GBC020)
+
+로그인 사용자가 본인이 저장한 코스의 일정 상세(`schedule`)를 통째로 교체한다. 소유권 확인 후 기존 `TourCourseUserDefinedDetail`을 전량 삭제하고 요청 내용으로 재삽입 — CO1(AI 코스 생성) 응답 검증과 동일한 규칙으로 날짜 범위·`contentId`·`type`을 검증한다.
+
+- 요청 바디의 `contentName`·`thumbnailImg`·`operatingHours`·`cost`는 조회 전용 표시 필드라 저장하지 않고 무시(`@JsonIgnoreProperties(ignoreUnknown=true)`) — 응답 시 TourAPI 라이브 조회로 재조립(`TourCourseAiResponseDto.PlaceVisit`과 동일 전략)
+- 날짜는 코스 `startDate`~`endDate` 범위, `contentId`는 TourAPI 라이브 후보(캐시) 존재 여부, `type`은 `PlaceType` 값인지 검증하고 실패 시 400
+- 상세 재삽입 시 Hibernate 기본 flush 순서(Insert가 Delete보다 먼저 실행)로 인해 `uq_course_date_seq_type` 유니크 제약 위반이 발생할 수 있어, `deleteAll()` 직후 명시적으로 `flush()`를 호출해 삭제를 먼저 커밋
+- `SecurityConfig`에 `PATCH /api/v1/tour-course/*` 인가 규칙 누락 발견 — 기존에는 `/title`·`/assign`처럼 별도 하위 경로만 인증을 요구했고 `/{courseId}` 자체는 catch-all `permitAll()`로 흘러들어가 미인증 사용자도 타인 코스 일정을 수정할 수 있는 상태였음. `hasAnyRole("USER","ADMIN")` 규칙 추가로 해결
+- `TourCourseUpdateRequestDto`(`schedule[].date`·`places[].seq`·`time`·`type`·`contentId`·`durationMinutes`) 신규, `TourCourseService.updateCourse()`/`TourCourseServiceImpl.updateCourse()` 신규, `TourCourseController`에 `@PatchMapping("/{courseId}")` 추가
+
+### Testing
+
+#### 코스 수정 단위 테스트 + 컨트롤러 슬라이스 테스트 추가
+
+`TourCourseServiceImpl.updateCourse()`에 JUnit5+Mockito 단위 테스트 7건, `TourCourseController`에 `@WebMvcTest` 기반 컨트롤러 슬라이스 테스트 4건을 추가했다.
+
+- `TourCourseServiceImplTest`: 성공(기존 일정 삭제+재삽입+재조립 응답 검증), 코스/사용자 미존재(404), 타인 코스(403), 날짜 범위 초과·잘못된 type·존재하지 않는 contentId(400)
+- `TourCourseControllerTest`: 성공 200, `schedule` 누락 시 400, 코스 미존재 404, 비즈니스 검증 실패 400 — `addFilters=false`로 서블릿 필터 체인을 생략하는 만큼 403(`AccessDeniedException`)은 서비스 단위 테스트에서만 검증(슬라이스 테스트에서는 Security의 예외 변환이 빠져 일반 `RuntimeException` 핸들러로 흘러 500이 되므로 대상 밖 — 기존 `PoiControllerTest`와 동일한 관례)
+
+### Files Created (3 files)
+
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseUpdateRequestDto.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/controller/TourCourseControllerTest.java`
+
+### Files Changed (6 files)
+
+- `src/main/java/com/eodegano/cocobackend/config/SecurityConfig.java`
+- `src/main/java/com/eodegano/cocobackend/controller/TourCourseController.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseService.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+
 ## [0.5.4] - 2026-08-15
 
 ### Fixed

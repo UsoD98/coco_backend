@@ -152,6 +152,7 @@ com.eodegano.cocobackend/
 - 코스 상세 조회: `GET /{courseId}` — 소유자 인증 후 헤더+일정 상세 반환. (✅ 구현 완료)
 - 코스 삭제: `DELETE /{courseId}` — 소유자 인증 후 상세→헤더 순 삭제. (✅ 구현 완료)
 - 코스 제목 수정: `PATCH /{courseId}/title` — 소유권 확인 후 `updateTitle()` 호출. (✅ 구현 완료)
+- 코스 일정 수정: `PATCH /{courseId}` — 소유권 확인 후 일정 상세 전량 교체(삭제 후 재삽입), CO1과 동일한 날짜·contentId·type 검증. (✅ 구현 완료)
 - 공개 뷰: `GET /{courseId}/view` — 인증 없이 courseId로 공개 조회. 카카오 공유 수신자용. (✅ 구현 완료, BOQ11 확정)
 
 ### B-F5. 인증/인가 (JWT + 카카오 OAuth)
@@ -170,7 +171,7 @@ com.eodegano.cocobackend/
 | --- | --- | --- |
 | S1 메인/검색 | 시군구 목록, 테마 목록, 데이터 보유 시군구 플래그 | 미구현 (상수 또는 정적 응답) |
 | S2 플래너 | POI 큐레이션 목록, 기본 추천 코스, POI 상세, 교통비 추정 | POI는 AI 생성 시 포함 / 큐레이션 전용 API 미구현 |
-| S2 플래너 저장 | 코스 저장·수정·삭제 (로그인 사용자) | 생성은 구현 / 저장 소유권 분리 미구현 |
+| S2 플래너 저장 | 코스 저장·수정·삭제 (로그인 사용자) | 구현 완료 (생성·일정 수정·삭제·소유권 이전) |
 | S2a POI 상세 드로어 | contentId 기반 POI 상세 통합 조회 | 구현 완료 |
 | S2b 로그인 모달 | 카카오 OAuth 콜백, 세션/토큰 발급 | 로컬·카카오 JWT 모두 구현 완료 |
 | S3 공유 뷰어 | 공유 ID로 코스+예산 스냅샷 조회, 공유 생성 | 공개 뷰(`/{courseId}/view`) 구현 / 예산 스냅샷 미구현 |
@@ -274,6 +275,7 @@ com.eodegano.cocobackend/
 | DELETE | `/{courseId}` | 코스 삭제 (인증·소유자) | ✅ |
 | GET | `/{courseId}/view` | 공개 코스 뷰 (인증 불필요) | ✅ |
 | PATCH | `/{courseId}/title` | 코스 제목 수정 (인증·소유자) | ✅ |
+| PATCH | `/{courseId}` | 코스 일정 수정 (인증·소유자) | ✅ |
 | PATCH | `/{courseId}/assign` | 코스 소유권 이전 (인증 필요) | ✅ |
 
 ### POI (`/api/v1/poi`)

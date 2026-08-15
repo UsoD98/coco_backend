@@ -11,6 +11,7 @@ import com.eodegano.cocobackend.dto.TourCourseGenerateRequestDto;
 import com.eodegano.cocobackend.dto.TourCourseGenerateResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseListItemDto;
 import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
+import com.eodegano.cocobackend.dto.TourCourseUpdateRequestDto;
 import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedDetailRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedRepository;
@@ -179,6 +180,73 @@ public class TourCourseServiceImpl implements TourCourseService {
         }
 
         course.updateTitle(title);
+    }
+
+    @Override
+    @Transactional
+    public TourCourseShareResponseDto updateCourse(Long courseId, TourCourseUpdateRequestDto request, String userEmail) {
+        TourCourseUserDefined course = tourCourseUserDefinedRepository.findById(courseId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다: " + courseId));
+
+        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
+
+        if (!user.getId().equals(course.getUserId())) {
+            throw new AccessDeniedException("해당 코스를 수정할 권한이 없습니다");
+        }
+
+        validateUpdateRequest(request, course.getStartDate(), course.getEndDate());
+
+        List<TourCourseUserDefinedDetail> oldDetails =
+                tourCourseUserDefinedDetailRepository.findByTourCourseId(courseId);
+        tourCourseUserDefinedDetailRepository.deleteAll(oldDetails);
+        tourCourseUserDefinedDetailRepository.flush();
+
+        List<TourCourseUserDefinedDetail> newDetails = new ArrayList<>();
+        for (TourCourseUpdateRequestDto.DailyScheduleUpdate day : request.getSchedule()) {
+            for (TourCourseUpdateRequestDto.PlaceUpdate place : day.getPlaces()) {
+                newDetails.add(TourCourseUserDefinedDetail.builder()
+                        .tourCourseId(courseId)
+                        .date(day.getDate())
+                        .seq(place.getSeq())
+                        .time(place.getTime())
+                        .durationMinutes(place.getDurationMinutes())
+                        .type(place.getType())
+                        .contentId(place.getContentId())
+                        .build());
+            }
+        }
+        tourCourseUserDefinedDetailRepository.saveAll(newDetails);
+
+        return buildCourseResponse(course);
+    }
+
+    private void validateUpdateRequest(TourCourseUpdateRequestDto request, LocalDate startDate, LocalDate endDate) {
+        Set<Long> contentIds = new HashSet<>();
+        for (TourCourseUpdateRequestDto.DailyScheduleUpdate day : request.getSchedule()) {
+            if (day.getDate().isBefore(startDate) || day.getDate().isAfter(endDate)) {
+                throw new IllegalArgumentException("일정 날짜가 코스 기간을 벗어났습니다: " + day.getDate());
+            }
+            for (TourCourseUpdateRequestDto.PlaceUpdate place : day.getPlaces()) {
+                contentIds.add(place.getContentId());
+                try {
+                    PlaceType.valueOf(place.getType());
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("유효하지 않은 장소 타입입니다: " + place.getType());
+                }
+            }
+        }
+
+        Set<Long> knownContentIds = tourLiveDataService.getAllCandidates().stream()
+                .map(PoiSummary::contentId)
+                .collect(Collectors.toSet());
+
+        if (!knownContentIds.containsAll(contentIds)) {
+            Set<Long> unknown = new HashSet<>(contentIds);
+            unknown.removeAll(knownContentIds);
+            log.error("존재하지 않는 장소 ID가 포함되어 있습니다: {}", unknown);
+            throw new IllegalArgumentException("존재하지 않는 장소 ID가 포함되어 있습니다");
+        }
     }
 
     // ── 코스 응답 빌더 ─────────────────────────────────────────────────────────

@@ -228,6 +228,14 @@
 - **FE 의존**: S4 컬렉션 — 코스 이름 인라인 편집.
 - **가치**: 저장 코스 식별성 — 기간·인원만으로는 코스 구분이 어렵기 때문에 제목 부여·수정이 필요.
 
+### CO8. 코스 일정 수정
+- **설명**: 로그인 사용자가 본인 코스의 일정 상세(`schedule`: 날짜별 장소 목록 — seq·time·type·contentId·durationMinutes)를 통째로 교체. 소유권 확인 후 기존 `TourCourseUserDefinedDetail` 전량 삭제 후 요청 내용으로 재삽입. 날짜는 코스 `startDate`~`endDate` 범위, `contentId`는 TourAPI 라이브 후보(캐시) 존재 여부, `type`은 `PlaceType` 값인지 검증(CO1 AI 응답 검증과 동일 규칙). 요청 바디의 `contentName`·`thumbnailImg`·`operatingHours`·`cost`는 조회 전용 표시 필드라 저장하지 않고 무시 — 응답 시 TourAPI 라이브 조회로 재조립.
+- **상태**: 미인증 → 401 / 타인 코스 → 403 / 코스 없음 → 404 / 날짜 범위 초과·존재하지 않는 contentId·잘못된 type → 400 / 성공 → 200.
+- **MVP**: ✅
+- **구현 상태**: ✅ (`PATCH /api/v1/tour-course/{courseId}`, 인증 필수, `TourCourseShareResponseDto` 반환)
+- **FE 의존**: S2 플래너 — 저장된 코스 재편집 후 저장.
+- **가치**: 컬렉션 상세 보기 이후 재편집·저장 플로우의 핵심.
+
 ### CO6. 별점·추천수 기반 알고리즘 코스 추천 (목표)
 - **설명**: `poi_rating.stars`·`poi_rating.likes`(v0.5.0부터 `tour.stars`/`tour.likes`에서 이전) 기반 POI 스코어링 알고리즘으로 여행자 조건(인원 버킷·테마·이동수단·기간·시군구)에 최적화된 Day별 코스를 Groq 없이 생성. 사용자 `travel_type` 선호도를 추가 가중치로 반영.
   - **단계 1 (v0.2.6 부분 구현)**: stars 기반 Tier 샘플링 + likes 정렬 보조 신호를 CO1 샘플링에 적용 완료 (Groq 여전히 사용).
