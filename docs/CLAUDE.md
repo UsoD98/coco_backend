@@ -201,7 +201,7 @@ UserServiceImpl (구현체, @Service)
 ## Common Gotchas
 
 1. **Spring Boot 4.0 변경사항**:
-   - `spring-boot-starter-webmvc-test` 대신 `spring-boot-starter-webmvc-test` 사용
+   - `spring-boot-starter-test`에 `spring-boot-starter-webmvc-test` 추가 필요 (MockMvc, `@WebMvcTest`, `@AutoConfigureMockMvc` 사용 시)
    - Jakarta EE 네임스페이스 (`jakarta.*`) 사용
 
 2. **JWT 토큰 갱신 시 주의**:
