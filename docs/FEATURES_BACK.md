@@ -368,7 +368,7 @@
   - POI 개별 상세 캐시 (`detailCommon2`/`detailIntro2`/`detailInfo2` 결과, `contentId` 키) — 코스 생성(CO1)·코스 조회(CO4)·공개 뷰(SH2)·POI 상세 조회(PO3)에서 공통 재사용
 - **상태**: 캐시 히트 → TourAPI 호출 없이 즉시 반환 / 캐시 미스·만료 → 라이브 호출 후 캐시 적재.
 - **MVP**: ✅ (v0.5.0 전환의 필수 구성요소)
-- **구현 상태**: ❌ (신규 구현 필요 — `spring-boot-starter-cache` + `com.github.ben-manes.caffeine:caffeine` 의존성 추가 필요, 현재 프로젝트에 캐시 라이브러리 없음)
+- **구현 상태**: ✅ (`CacheConfig`에 `spring-boot-starter-cache` + `com.github.ben-manes.caffeine:caffeine` 의존성 기반 `CaffeineCacheManager` 구성 완료 — `poiCandidates`·`poiDetail`·`poiFullDetail` 3종 캐시, 전부 TTL 6h·`maximumSize(2000)`. `TourLiveDataService.getAllCandidates()`/`getDetail()`/`getFullDetail()`이 `@Cacheable`로 각 캐시 실사용 중, PO1~PO3·CO1·CO4·SH2 전부 재사용)
 - **FE 의존**: 없음 (인프라, 응답 속도에 간접 영향).
 - **가치**: 1GB 메모리 프리티어 서버에서 별도 인프라(Redis 등) 없이 TourAPI 호출량·응답 지연을 실질적으로 절감.
 
@@ -382,10 +382,10 @@ FE MVP 기준으로 백엔드 미구현 항목 우선순위를 나열한다.
 
 | 우선순위 | 기능 ID | 기능명 | 이유 |
 | --- | --- | --- | --- |
-| 1 | INF4 | CORS 설정 | FE-BE 통신 전제, 모든 API 사용 전 필요 |
-| 2 | DA5 | Caffeine 캐시 계층 | v0.5.0 라이브 호출 구조 전환의 선결 조건 (PO1~PO3, CO1, CO4, SH2 전부 의존) |
+| ~~1~~ | ~~INF4~~ | ~~CORS 설정~~ | ~~FE-BE 통신 전제, 모든 API 사용 전 필요~~ — ✅ 구현 완료 |
+| ~~2~~ | ~~DA5~~ | ~~Caffeine 캐시 계층~~ | ~~v0.5.0 라이브 호출 구조 전환의 선결 조건~~ — ✅ 구현 완료 |
 | 3 | PO4 | 시군구 목록·플래그 | S1 메인 화면 목적지 셀렉트 |
-| 4 | PO2 | 큐레이션 POI 목록 | S2 플래너 핵심 데이터 |
+| 4 | PO2 | 큐레이션 POI 목록 | S2 플래너 핵심 데이터 — API 자체는 구현됨(GBC017), `peopleCount`/`theme`/`avgPrice` 미완성(BOQ14)으로 🔧 유지 |
 | ~~5~~ | ~~PO3~~ | ~~POI 상세 통합 조회~~ | ~~S2a 상세 드로어~~ — ✅ 구현 완료 |
 | 6 | BU3 | 교통비 추정 | S2 예산 대시보드 |
 
