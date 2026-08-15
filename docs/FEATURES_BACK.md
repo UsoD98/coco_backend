@@ -75,6 +75,14 @@
 - **FE 의존**: 없음.
 - **가치**: 수동 배포·서버 SSH 접속 없이 push만으로 반영, 시크릿 교체 시에도 서버 접속 불필요.
 
+### INF6. DB·외부 API 연동 통합 테스트 인프라 (TODO — 당장 착수 안 함)
+- **설명**: 현재 테스트는 Mockito 단위 테스트(서비스 계층, Repository/외부 클라이언트 Mock)와 `@WebMvcTest` 슬라이스 테스트(컨트롤러 계층, 서비스 Mock)까지만 구성됨. 실제 MariaDB에 쓰기까지 검증하는 테스트(`PoiRating`/`UserPoiLike` insert·update 등)와 실제 TourAPI 응답 계약을 검증하는 테스트는 없음.
+- **상태**: (미착수) — 도입 시 (1) Testcontainers 기반 MariaDB 통합 테스트 환경, (2) `TourApiClient`가 `RestClient.create()`를 필드에서 직접 생성해 현재는 가로챌 수 없으므로 `RestClient.Builder` 주입 리팩터링 후 `MockRestServiceServer`/WireMock 스텁 도입이 선행되어야 함.
+- **MVP**: 🔜
+- **구현 상태**: ❌ (TODO, PRD_BACK.md BOQ15 참고)
+- **FE 의존**: 없음 (인프라).
+- **가치**: 서비스 로직 단위 검증을 넘어 실제 DB 트랜잭션·외부 API 응답 계약 변경까지 자동 검증해 회귀를 조기 발견.
+
 ---
 
 ## 1. 인증 (Authentication)
