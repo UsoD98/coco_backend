@@ -6,6 +6,7 @@ import com.eodegano.cocobackend.dto.TourCourseGenerateResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseListItemDto;
 import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseTitleUpdateRequestDto;
+import com.eodegano.cocobackend.dto.TourCourseUpdateRequestDto;
 import com.eodegano.cocobackend.service.TourCourseService;
 
 import java.util.List;
@@ -86,5 +87,16 @@ public class TourCourseController {
         log.info("Updating title for courseId: {}", courseId);
         tourCourseService.updateCourseTitle(courseId, request.getTitle(), authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("코스 제목이 수정되었습니다."));
+    }
+
+    @PatchMapping("/{courseId}")
+    public ResponseEntity<ApiResponse<TourCourseShareResponseDto>> updateCourse(
+            @PathVariable Long courseId,
+            @RequestBody @Valid TourCourseUpdateRequestDto request,
+            Authentication authentication
+    ) {
+        log.info("Updating courseId: {}", courseId);
+        TourCourseShareResponseDto result = tourCourseService.updateCourse(courseId, request, authentication.getName());
+        return ResponseEntity.ok(ApiResponse.ok("코스 수정 완료했습니다.", result));
     }
 }
