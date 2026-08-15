@@ -19,10 +19,12 @@ public class CacheConfig {
 
     public static final String POI_CANDIDATES_CACHE = "poiCandidates";
     public static final String POI_DETAIL_CACHE = "poiDetail";
+    public static final String POI_FULL_DETAIL_CACHE = "poiFullDetail";
 
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager(POI_CANDIDATES_CACHE, POI_DETAIL_CACHE);
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+                POI_CANDIDATES_CACHE, POI_DETAIL_CACHE, POI_FULL_DETAIL_CACHE);
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(6, TimeUnit.HOURS)
                 .maximumSize(2000));

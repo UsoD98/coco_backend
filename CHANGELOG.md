@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### `GET /api/v1/poi/{contentId}` — POI 상세 통합 조회 (GBC018)
+
+`contentId` 기반으로 TourAPI `detailCommon2`(공통 정보) + `detailInfo2`(유형별 반복정보)를 라이브 호출해 단일 응답으로 통합 반환한다. 인증 불필요(비로그인 허용).
+
+- 원 설계는 로컬 `DetailCommon`/`DetailInfo` 엔티티 조인 및 `food_avg_price` 조인을 전제했으나, 두 테이블 모두 v0.5.0에서 공모전 규정(관광정보 로컬 DB 미저장)에 따라 삭제된 상태 — `TourApiClient.detailCommon`/`detailInfo` 라이브 호출로 대체
+- `avgPrice`는 근거 테이블 소실(BOQ14 미확정)로 `GET /api/v1/poi`(PO2)와 동일하게 항상 `null` 반환
+- 신규 `poiFullDetail` Caffeine 캐시(TTL 6h) 추가 — 기존 `poiDetail` 캐시(운영시간/비용 2필드 전용)와 별도로 분리
+- TourAPI에 존재하지 않는 contentId → `NoSuchElementException` → `GlobalExceptionHandler`가 404로 매핑
+- `PoiDetailService`/`PoiDetailServiceImpl` 신규, `TourLiveDataService.getFullDetail()` 신규, `PoiController`에 `@GetMapping("/{contentId}")` 추가
+- `PoiDetailResponseDto`(`contentId`·`contentTypeId`·`title`·`tel`·`homepage`·`overview`·`firstimage`·`firstimage2`·`addr1`·`addr2`·`mapx`·`mapy`·`avgPrice`·`infoList`), `PoiInfoItemDto`(`infoname`·`infotext`) 신규
+
 ## [0.5.2] - 2026-08-08
 
 ### Added

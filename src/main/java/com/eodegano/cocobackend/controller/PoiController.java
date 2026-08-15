@@ -2,8 +2,10 @@ package com.eodegano.cocobackend.controller;
 
 import com.eodegano.cocobackend.dto.ApiResponse;
 import com.eodegano.cocobackend.dto.PoiCurationResponseDto;
+import com.eodegano.cocobackend.dto.PoiDetailResponseDto;
 import com.eodegano.cocobackend.dto.PoiLikeResponseDto;
 import com.eodegano.cocobackend.service.PoiCurationService;
+import com.eodegano.cocobackend.service.PoiDetailService;
 import com.eodegano.cocobackend.service.PoiLikeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ public class PoiController {
 
     private final PoiLikeService poiLikeService;
     private final PoiCurationService poiCurationService;
+    private final PoiDetailService poiDetailService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<PoiCurationResponseDto>> getPoiList(
@@ -30,6 +33,12 @@ public class PoiController {
             @RequestParam(required = false) Integer contentTypeId) {
         PoiCurationResponseDto result = poiCurationService.getPoiList(sigunguCode, peopleCount, contentTypeId);
         return ResponseEntity.ok(ApiResponse.ok("POI 목록을 조회했습니다.", result));
+    }
+
+    @GetMapping("/{contentId}")
+    public ResponseEntity<ApiResponse<PoiDetailResponseDto>> getPoiDetail(@PathVariable Long contentId) {
+        PoiDetailResponseDto result = poiDetailService.getPoiDetail(contentId);
+        return ResponseEntity.ok(ApiResponse.ok("POI 상세 정보를 조회했습니다.", result));
     }
 
     @PostMapping("/{contentId}/like")
