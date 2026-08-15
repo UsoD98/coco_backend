@@ -171,7 +171,7 @@ com.eodegano.cocobackend/
 | S1 메인/검색 | 시군구 목록, 테마 목록, 데이터 보유 시군구 플래그 | 미구현 (상수 또는 정적 응답) |
 | S2 플래너 | POI 큐레이션 목록, 기본 추천 코스, POI 상세, 교통비 추정 | POI는 AI 생성 시 포함 / 큐레이션 전용 API 미구현 |
 | S2 플래너 저장 | 코스 저장·수정·삭제 (로그인 사용자) | 생성은 구현 / 저장 소유권 분리 미구현 |
-| S2a POI 상세 드로어 | contentId 기반 POI 상세 통합 조회 | 미구현 |
+| S2a POI 상세 드로어 | contentId 기반 POI 상세 통합 조회 | 구현 완료 |
 | S2b 로그인 모달 | 카카오 OAuth 콜백, 세션/토큰 발급 | 로컬·카카오 JWT 모두 구현 완료 |
 | S3 공유 뷰어 | 공유 ID로 코스+예산 스냅샷 조회, 공유 생성 | 공개 뷰(`/{courseId}/view`) 구현 / 예산 스냅샷 미구현 |
 | S4 컬렉션 | 사용자 코스 목록·상세 조회, 삭제 | 구현 완료 (코스 목록·상세·삭제·제목 수정) |
@@ -234,12 +234,12 @@ com.eodegano.cocobackend/
 
 ### 미구현 (우선순위 순)
 
-1. POI 큐레이션 전용 조회 API (인원버킷·테마·지역 필터)
-2. POI 상세 통합 조회 API (contentId → 공통·소개·상세 통합)
-3. 시군구 목록·데이터 보유 여부 응답 API
-4. 교통비 추정 계산 로직 및 API
-5. 예산 메타데이터(평균 객단가) API
-6. TourAPI 데이터 월 1회 주기 수집 배치 스케줄링
+1. 시군구 목록·데이터 보유 여부 응답 API
+2. 교통비 추정 계산 로직 및 API
+3. 예산 메타데이터(평균 객단가) API
+4. TourAPI 데이터 월 1회 주기 수집 배치 스케줄링
+
+> ✅ v0.5.3: POI 큐레이션 전용 조회 API(PO2), POI 상세 통합 조회 API(PO3) 구현 완료.
 
 ---
 
@@ -281,7 +281,7 @@ com.eodegano.cocobackend/
 | 메서드 | 경로 | 설명 | 구현 |
 | --- | --- | --- | --- |
 | GET | `/` | 큐레이션 POI 목록 (지역·유형 필터만 구현, 인원버킷·테마·avgPrice는 보류 — BOQ14) | 🔧 |
-| GET | `/{contentId}` | POI 상세 통합 조회 | 🔜 |
+| GET | `/{contentId}` | POI 상세 통합 조회 | ✅ |
 | POST | `/{contentId}/like` | POI 좋아요 토글 (인증 필요) | ✅ |
 
 ### 관리자 (`/api/admin`)
@@ -312,6 +312,7 @@ com.eodegano.cocobackend/
 - **BOQ14. 예산 메타데이터 근거 테이블 소실** — 🔶 **v0.5.0 신규**: `food_avg_price`(BU1 음식점 평균 객단가) 테이블이 로컬 DB 미저장 원칙에 따라 제거됨. TourAPI 라이브 응답(`detailIntro2`)에서 대체 가능한 필드가 있는지, 없다면 이 기능 자체를 축소/보류할지 결정 필요. 상세: [FEATURES_BACK.md BU1](FEATURES_BACK.md). **BU2(숙박 인원별 분류)는 2026-08-08 기획 결정으로 스코프 아웃 확정** — `peopleCount`는 필수 입력 파라미터로만 받고 필터링에는 사용하지 않음.
   - **TODO**: `GET /api/v1/poi`(`PoiCurationServiceImpl`)는 이 결정 전까지 `avgPrice`를 항상 `null`로 반환하도록 임시 구현됨. 데이터 소스 확정 후 `contentTypeId=39`(음식점) 케이스에 실제 조인 로직 추가 필요.
   - **TODO**: 같은 API의 `theme`(테마 필터링) 파라미터는 데이터 소스·매핑 설계가 없어 현재 미구현 상태로 보류됨 (컨트롤러에서 파라미터 자체를 받지 않음). 설계 확정 후 추가 필요.
+- **BOQ15. DB·외부 API(TourAPI) 연동 통합 테스트 인프라** — 🔶 **v0.5.3 신규, TODO(당장 착수 안 함)**: 현재 테스트는 Mockito 단위 테스트(`PoiCurationServiceImplTest`·`PoiDetailServiceImplTest`·`PoiLikeServiceImplTest`·`TourLiveDataServiceTest`)와 `@WebMvcTest` 슬라이스 테스트(`PoiControllerTest`, 서비스 계층은 Mock)까지만 구성되어 있고, 실제 MariaDB 쓰기(`PoiRating`/`UserPoiLike` insert·update)와 실제 TourAPI 응답 계약을 검증하는 테스트는 없음. 도입 시 필요한 것: (1) Testcontainers 기반 MariaDB 통합 테스트 환경, (2) `TourApiClient`가 `RestClient.create()`를 필드에서 직접 생성해 현재는 가로챌 수 없으므로 `RestClient.Builder` 주입으로 리팩터링 후 `MockRestServiceServer`/WireMock으로 스텁. 필요성은 확인됐으나 우선순위가 낮아 보류 — 착수 시점에 재검토.
 
 ---
 

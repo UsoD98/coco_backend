@@ -75,6 +75,14 @@
 - **FE 의존**: 없음.
 - **가치**: 수동 배포·서버 SSH 접속 없이 push만으로 반영, 시크릿 교체 시에도 서버 접속 불필요.
 
+### INF6. DB·외부 API 연동 통합 테스트 인프라 (TODO — 당장 착수 안 함)
+- **설명**: 현재 테스트는 Mockito 단위 테스트(서비스 계층, Repository/외부 클라이언트 Mock)와 `@WebMvcTest` 슬라이스 테스트(컨트롤러 계층, 서비스 Mock)까지만 구성됨. 실제 MariaDB에 쓰기까지 검증하는 테스트(`PoiRating`/`UserPoiLike` insert·update 등)와 실제 TourAPI 응답 계약을 검증하는 테스트는 없음.
+- **상태**: (미착수) — 도입 시 (1) Testcontainers 기반 MariaDB 통합 테스트 환경, (2) `TourApiClient`가 `RestClient.create()`를 필드에서 직접 생성해 현재는 가로챌 수 없으므로 `RestClient.Builder` 주입 리팩터링 후 `MockRestServiceServer`/WireMock 스텁 도입이 선행되어야 함.
+- **MVP**: 🔜
+- **구현 상태**: ❌ (TODO, PRD_BACK.md BOQ15 참고)
+- **FE 의존**: 없음 (인프라).
+- **가치**: 서비스 로직 단위 검증을 넘어 실제 DB 트랜잭션·외부 API 응답 계약 변경까지 자동 검증해 회귀를 조기 발견.
+
 ---
 
 ## 1. 인증 (Authentication)
@@ -173,10 +181,10 @@
 - **가치**: F1 인원수 기반 큐레이션의 핵심 응답.
 
 ### PO3. POI 상세 통합 조회
-- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·요금/운영시간·유형별 소개정보를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailIntro2`/`detailInfo2` 라이브 호출(PO1 캐시 재사용)을 조합해 응답 구성.
+- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유).
 - **상태**: TourAPI에 존재하지 않는 contentId → 404 / 성공 → 200.
 - **MVP**: ✅
-- **구현 상태**: ❌ (`GET /api/v1/poi/{contentId}` 미구현)
+- **구현 상태**: ✅ (`GET /api/v1/poi/{contentId}`, 인증 불필요) — `avgPrice`는 BOQ14 미확정으로 항상 `null` 반환 (PO2와 동일)
 - **FE 의존**: S2a POI 상세 드로어.
 - **가치**: 사용자가 코스 추가 전 상세 정보를 확인하는 핵심 API.
 
@@ -370,7 +378,7 @@ FE MVP 기준으로 백엔드 미구현 항목 우선순위를 나열한다.
 | 2 | DA5 | Caffeine 캐시 계층 | v0.5.0 라이브 호출 구조 전환의 선결 조건 (PO1~PO3, CO1, CO4, SH2 전부 의존) |
 | 3 | PO4 | 시군구 목록·플래그 | S1 메인 화면 목적지 셀렉트 |
 | 4 | PO2 | 큐레이션 POI 목록 | S2 플래너 핵심 데이터 |
-| 5 | PO3 | POI 상세 통합 조회 | S2a 상세 드로어 |
+| ~~5~~ | ~~PO3~~ | ~~POI 상세 통합 조회~~ | ~~S2a 상세 드로어~~ — ✅ 구현 완료 |
 | 6 | BU3 | 교통비 추정 | S2 예산 대시보드 |
 
 > ❌ v0.5.0에서 DA1~DA3(TourAPI 배치 수집·스케줄링·FoodAvgPrice 적재) 폐지 — 로컬 DB 미저장 원칙에 따라 대상 자체가 사라짐.

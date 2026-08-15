@@ -91,6 +91,56 @@ public class TourLiveDataService {
         return new PoiDetail(contentId, contentTypeId, operatingHours, cost);
     }
 
+    /**
+     * POI 상세 통합 조회 (detailCommon2 + detailInfo2 기반, GBC018)
+     * contentId가 TourAPI에 존재하지 않으면 null 반환 (호출자가 404로 매핑)
+     */
+    @Cacheable(cacheNames = CacheConfig.POI_FULL_DETAIL_CACHE, key = "#p0")
+    public PoiFullDetail getFullDetail(Long contentId) {
+        JsonNode common = firstItem(api.detailCommon(contentId));
+        if (common == null) {
+            return null;
+        }
+
+        Integer contentTypeId = api.integer(common, "contenttypeid");
+        List<PoiInfoItem> infoList = contentTypeId == null
+                ? List.of()
+                : fetchInfoList(contentId, contentTypeId);
+
+        return new PoiFullDetail(
+                contentId,
+                contentTypeId,
+                Optional.ofNullable(api.text(common, "title")).orElse("(제목없음)"),
+                api.text(common, "tel"),
+                stripHtml(api.text(common, "homepage")),
+                stripHtml(api.text(common, "overview")),
+                api.text(common, "firstimage"),
+                api.text(common, "firstimage2"),
+                api.text(common, "addr1"),
+                api.text(common, "addr2"),
+                parseDecimal(api.text(common, "mapx")),
+                parseDecimal(api.text(common, "mapy")),
+                infoList
+        );
+    }
+
+    private List<PoiInfoItem> fetchInfoList(Long contentId, Integer contentTypeId) {
+        JsonNode items = api.extractItems(api.detailInfo(contentId, contentTypeId));
+        if (items == null || !items.isArray()) {
+            return List.of();
+        }
+
+        List<PoiInfoItem> result = new ArrayList<>();
+        for (JsonNode n : items) {
+            String infoname = api.text(n, "infoname");
+            String infotext = stripHtml(api.text(n, "infotext"));
+            if (infoname != null || infotext != null) {
+                result.add(new PoiInfoItem(infoname, infotext));
+            }
+        }
+        return result;
+    }
+
     private PoiSummary mapSummary(JsonNode n) {
         return new PoiSummary(
                 Long.parseLong(api.text(n, "contentid")),

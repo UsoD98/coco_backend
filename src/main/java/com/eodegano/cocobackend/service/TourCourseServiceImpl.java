@@ -202,6 +202,7 @@ public class TourCourseServiceImpl implements TourCourseService {
                                     .time(place.getTime())
                                     .type(place.getType())
                                     .contentId(place.getContentId())
+                                    .contentName(titleOf(summaryMap, place.getContentId()))
                                     .durationMinutes(place.getDurationMinutes())
                                     .thumbnailImg(thumbnailOf(summaryMap, place.getContentId()))
                                     .operatingHours(operatingHoursOf(detailMap, place.getContentId()))
