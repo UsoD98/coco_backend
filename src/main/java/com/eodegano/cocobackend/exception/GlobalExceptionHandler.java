@@ -4,6 +4,7 @@ import com.eodegano.cocobackend.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -63,6 +64,18 @@ public class GlobalExceptionHandler {
         String msg = ex.getMessage() != null ? ex.getMessage() : "요청한 리소스를 찾을 수 없습니다.";
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.of(404, msg, null));
+    }
+
+    // 컨트롤러/서비스에서 직접 던진 AccessDeniedException은 DispatcherServlet 내에서
+    // 여기로 먼저 해석되어, 필터 체인의 ExceptionTranslationFilter(JwtAccessDeniedHandler)까지 전파되지 않는다.
+    // 그 핸들러가 반환하는 응답과 동일한 형태(403)로 맞춰준다.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex) {
+        log.error("Access denied: {}", ex.getMessage());
+
+        String msg = ex.getMessage() != null ? ex.getMessage() : "접근 권한이 없습니다.";
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.of(403, msg, null));
     }
 
     @ExceptionHandler(RuntimeException.class)

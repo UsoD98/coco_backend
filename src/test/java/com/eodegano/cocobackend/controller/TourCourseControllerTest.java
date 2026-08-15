@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,8 +27,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * TourCourseController 슬라이스(웹 계층) 테스트 — GBC020 코스 수정.
  * 서비스는 Mock으로 대체하고 Controller → @Valid → GlobalExceptionHandler → JSON 응답 래핑까지만 검증한다.
- * addFilters=false로 서블릿 필터 체인(JWT/Security)을 생략했으므로 인가 규칙(403) 검증은 범위 밖이다
- * (SecurityConfig 별도 검증 필요, AccessDeniedException은 서비스 단위 테스트에서 검증).
+ * addFilters=false로 서블릿 필터 체인(JWT/Security)을 생략했으므로, SecurityConfig의 hasRole 등
+ * 실제 인가 규칙 검증은 이 테스트의 범위가 아니다 (SecurityConfig 별도 검증 필요).
+ * 단, 서비스가 던지는 AccessDeniedException(소유권 검증 실패)은 DispatcherServlet 내에서
+ * GlobalExceptionHandler가 직접 해석하므로 필터와 무관하게 이 계층에서도 403으로 검증 가능하다.
  */
 @WebMvcTest(TourCourseController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -125,6 +128,21 @@ class TourCourseControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("404"))
                 .andExpect(jsonPath("$.msg").value("존재하지 않는 코스입니다: 999"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/tour-course/{courseId} - 본인 코스가 아님 → 403")
+    void updateCourseFailWithNotOwner() throws Exception {
+        given(tourCourseService.updateCourse(eq(1L), any(), eq("test@test.com")))
+                .willThrow(new AccessDeniedException("해당 코스를 수정할 권한이 없습니다"));
+
+        mockMvc.perform(patch("/api/v1/tour-course/1")
+                        .contentType("application/json")
+                        .content(VALID_BODY)
+                        .principal(new UsernamePasswordAuthenticationToken("test@test.com", null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("403"))
+                .andExpect(jsonPath("$.msg").value("해당 코스를 수정할 권한이 없습니다"));
     }
 
     @Test

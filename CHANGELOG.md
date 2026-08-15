@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-08-15
+
+### Fixed
+
+#### 서비스에서 던진 AccessDeniedException이 403 대신 500으로 응답되던 문제 수정
+
+`TourCourseServiceImpl`의 소유권 검증 5곳(`getCourseDetail`·`deleteCourse`·`assignCourse`·`updateCourseTitle`·`updateCourse`)에서 던지는 `AccessDeniedException`이 `GlobalExceptionHandler`에 전용 핸들러 없이 제네릭 `RuntimeException` 핸들러로 흡수되어 403이 아닌 500 "서버 오류가 발생했습니다"로 응답되고 있었다.
+
+- 원인: `JwtAccessDeniedHandler`(`SecurityConfig`의 `exceptionHandling().accessDeniedHandler(...)`)는 `ExceptionTranslationFilter`가 필터 체인 밖으로 전파된 `AccessDeniedException`만 캐치하는데, 컨트롤러/서비스에서 애플리케이션 코드로 직접 던진 예외는 `DispatcherServlet` 내부에서 `HandlerExceptionResolver`(`@ExceptionHandler` 매칭)가 먼저 소비해버려 필터까지 전파되지 않음 — 즉 Security 필터 자체의 인가 실패(예: `hasRole` 불일치)에서 던져지는 것과, 애플리케이션 코드가 직접 던지는 것은 처리 경로가 다름
+- `GlobalExceptionHandler`에 `@ExceptionHandler(AccessDeniedException.class)` 추가, `JwtAccessDeniedHandler`와 동일한 응답 형태(`ApiResponse.of(403, msg, null)`)로 통일
+
+### Testing
+
+- `TourCourseControllerTest`에 "본인 코스가 아님 → 403" 케이스 추가 — 이 예외는 `@WebMvcTest`가 로드하는 `GlobalExceptionHandler`가 처리하므로 `addFilters=false`(Security 필터 생략)와 무관하게 슬라이스 테스트에서도 검증 가능해짐. 기존 테스트 클래스 상단 주석(403은 서비스 단위 테스트에서만 검증 가능하다는 설명)도 함께 정정
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/exception/GlobalExceptionHandler.java`
+- `src/test/java/com/eodegano/cocobackend/controller/TourCourseControllerTest.java`
+
 ## [0.5.5] - 2026-08-15
 
 ### Added
