@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-08-15
+
+### Fixed
+
+#### 여행 코스 생성 응답에 관광지명(`contentName`) 필드 누락 수정
+
+`POST /api/v1/tour-course` 응답의 `PlaceInfo`는 썸네일·운영시간·비용은 포함하면서 정작 관광지 제목이 빠져 있었다. 공유뷰(`GET /{courseId}`)의 `PlaceInfo.placeName`에서 이미 쓰던 `titleOf(summaryMap, contentId)` 헬퍼(`PoiSummary.title()` 반환)를 그대로 재사용해 생성 응답에도 채운다.
+
+- `TourCourseGenerateResponseDto.PlaceInfo`에 `contentName` 필드 추가
+- `TourCourseServiceImpl.buildGenerateResponse()`에서 `titleOf(...)`로 값 채움
+
+### Files Changed (2 files)
+
+- `dto/TourCourseGenerateResponseDto.java`
+- `service/TourCourseServiceImpl.java`
+
+## [0.5.3] - 2026-08-15
+
 ### Added
 
 #### `GET /api/v1/poi/{contentId}` — POI 상세 통합 조회 (GBC018)
@@ -19,6 +37,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TourAPI에 존재하지 않는 contentId → `NoSuchElementException` → `GlobalExceptionHandler`가 404로 매핑
 - `PoiDetailService`/`PoiDetailServiceImpl` 신규, `TourLiveDataService.getFullDetail()` 신규, `PoiController`에 `@GetMapping("/{contentId}")` 추가
 - `PoiDetailResponseDto`(`contentId`·`contentTypeId`·`title`·`tel`·`homepage`·`overview`·`firstimage`·`firstimage2`·`addr1`·`addr2`·`mapx`·`mapy`·`avgPrice`·`infoList`), `PoiInfoItemDto`(`infoname`·`infotext`) 신규
+
+### Testing
+
+#### POI 기능 단위 테스트 + 컨트롤러 슬라이스 테스트 추가
+
+`PoiController`/`PoiCurationServiceImpl`/`PoiDetailServiceImpl`/`PoiLikeServiceImpl`/`TourLiveDataService`에 JUnit5+Mockito 단위 테스트 25건, `@WebMvcTest` 기반 컨트롤러 슬라이스 테스트 7건을 추가했다. 기존 25건 포함 전체 57건 통과.
+
+- `PoiCurationServiceImplTest`: 필수 파라미터 검증, sigunguCode 정규화, contentTypeId 필터, 빈 결과 처리, avgPrice null 고정(BOQ14)
+- `PoiDetailServiceImplTest`: GBC018 응답 매핑, 404(`NoSuchElementException`), avgPrice null 고정(BOQ14)
+- `PoiLikeServiceImplTest`: 좋아요 추가(신규/기존 poi_rating)·취소·사용자 미존재
+- `TourLiveDataServiceTest`: `TourApiClient`를 spy로 감싸 HTTP 호출 메서드만 스텁하고 실제 JSON 파싱 로직(`getFullDetail`/`getDetail`/`getAllCandidates`)은 그대로 실행 — 기존에 전혀 테스트되지 않던 핵심 파싱 로직 회귀 안전망 확보
+- `PoiControllerTest`: `@WebMvcTest` + `addFilters=false`로 서블릿 필터 체인은 생략하고 Controller→GlobalExceptionHandler→JSON 응답까지 검증. Filter 빈(`JwtAuthenticationFilter`)이 컨텍스트에 함께 로드되어 `JwtProvider`를 `@MockitoBean`으로 채워 해결
+- `docs/PRD_BACK.md` BOQ15, `docs/FEATURES_BACK.md` INF6 신규: DB(Testcontainers)·TourAPI(WireMock) 연동 실통합 테스트는 인프라 부재로 보류, TODO로 기록 (`TourApiClient`가 `RestClient`를 필드에서 직접 생성해 현재는 가로챌 수 없음)
+
+### Files Created (5 files)
+
+- `src/test/java/com/eodegano/cocobackend/controller/PoiControllerTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiCurationServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiDetailServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiLikeServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourLiveDataServiceTest.java`
+
+### Files Changed (2 files)
+
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
 
 ## [0.5.2] - 2026-08-08
 
