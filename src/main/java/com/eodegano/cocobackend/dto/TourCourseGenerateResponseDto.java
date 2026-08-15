@@ -36,6 +36,7 @@ public class TourCourseGenerateResponseDto {
         private LocalTime time;
         private String type;
         private Long contentId;
+        private String contentName;
         private Integer durationMinutes;
         private String thumbnailImg;
         private String operatingHours;

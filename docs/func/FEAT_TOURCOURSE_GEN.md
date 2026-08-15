@@ -127,7 +127,8 @@ Response (200 OK):
           "seq": 1,
           "time": "09:00:00",
           "type": "ATTRACTION",
-          "contentId": 126508
+          "contentId": 126508,
+          "contentName": "불국사"
         }
       ]
     }
