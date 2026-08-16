@@ -84,7 +84,7 @@ class TourCourseServiceImplTest {
 
     private TourCourseUpdateRequestDto validRequest() {
         TourCourseUpdateRequestDto.PlaceUpdate place =
-                new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+                new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120, 5000);
         TourCourseUpdateRequestDto.DailyScheduleUpdate day =
                 new TourCourseUpdateRequestDto.DailyScheduleUpdate(START_DATE, List.of(place));
         return new TourCourseUpdateRequestDto(List.of(day));
@@ -171,7 +171,7 @@ class TourCourseServiceImplTest {
         given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
 
         TourCourseUpdateRequestDto.PlaceUpdate place =
-                new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+                new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120, 5000);
         TourCourseUpdateRequestDto.DailyScheduleUpdate day = new TourCourseUpdateRequestDto.DailyScheduleUpdate(
                 START_DATE.minusDays(1), List.of(place));
         TourCourseUpdateRequestDto request = new TourCourseUpdateRequestDto(List.of(day));
@@ -188,7 +188,7 @@ class TourCourseServiceImplTest {
         given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
 
         TourCourseUpdateRequestDto.PlaceUpdate place =
-                new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "INVALID_TYPE", 100L, 120);
+                new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "INVALID_TYPE", 100L, 120, 5000);
         TourCourseUpdateRequestDto.DailyScheduleUpdate day =
                 new TourCourseUpdateRequestDto.DailyScheduleUpdate(START_DATE, List.of(place));
         TourCourseUpdateRequestDto request = new TourCourseUpdateRequestDto(List.of(day));
