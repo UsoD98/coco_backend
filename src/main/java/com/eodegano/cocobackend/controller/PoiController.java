@@ -47,7 +47,6 @@ public class PoiController {
     public ResponseEntity<ApiResponse<PoiLikeResponseDto>> toggleLike(
             @PathVariable Long contentId,
             Authentication authentication) {
-        log.info("authentication.getName() = {}", authentication.getName());
         PoiLikeResponseDto result = poiLikeService.toggleLike(contentId, authentication.getName());
         String msg = result.isLiked() ? "좋아요가 추가되었습니다." : "좋아요가 취소되었습니다.";
         return ResponseEntity.ok(ApiResponse.ok(msg, result));

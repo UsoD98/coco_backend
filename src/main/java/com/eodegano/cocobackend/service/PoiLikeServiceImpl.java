@@ -34,18 +34,18 @@ public class PoiLikeServiceImpl implements PoiLikeService {
         User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
-        log.info("User {} liked contentId {}", user.getEmail(), contentId);
         Optional<UserPoiLike> existing = userPoiLikeRepository.findByUserIdAndContentId(user.getId(), contentId);
 
         boolean liked;
         int likes;
         if (existing.isPresent()) {
             userPoiLikeRepository.delete(existing.get());
+            userPoiLikeRepository.flush();
             poiRatingRepository.decrementLikes(contentId);
             liked = false;
             likes = poiRatingRepository.findById(contentId).map(PoiRating::getLikesOrZero).orElse(0);
         } else {
-            userPoiLikeRepository.save(UserPoiLike.of(user.getId(), contentId));
+            userPoiLikeRepository.saveAndFlush(UserPoiLike.of(user.getId(), contentId));
             if (poiRatingRepository.existsById(contentId)) {
                 poiRatingRepository.incrementLikes(contentId);
             } else {
