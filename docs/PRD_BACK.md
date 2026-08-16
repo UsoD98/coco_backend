@@ -169,7 +169,7 @@ com.eodegano.cocobackend/
 
 | FE 화면 | 필요 API (백엔드 책임) | 구현 상태 |
 | --- | --- | --- |
-| S1 메인/검색 | 시군구 목록, 테마 목록, 데이터 보유 시군구 플래그 | 미구현 (상수 또는 정적 응답) |
+| S1 메인/검색 | ~~시군구 목록, 데이터 보유 시군구 플래그~~(취소), 테마 목록 | 미구현 (상수 또는 정적 응답) |
 | S2 플래너 | POI 큐레이션 목록, 기본 추천 코스, POI 상세, 교통비 추정 | POI는 AI 생성 시 포함 / 큐레이션 전용 API 미구현 |
 | S2 플래너 저장 | 코스 저장·수정·삭제 (로그인 사용자) | 구현 완료 (생성·일정 수정·삭제·소유권 이전) |
 | S2a POI 상세 드로어 | contentId 기반 POI 상세 통합 조회 | 구현 완료 |
@@ -235,7 +235,7 @@ com.eodegano.cocobackend/
 
 ### 미구현 (우선순위 순)
 
-1. 시군구 목록·데이터 보유 여부 응답 API
+1. ~~시군구 목록·데이터 보유 여부 응답 API~~ (취소)
 2. 교통비 추정 계산 로직 및 API
 3. 예산 메타데이터(평균 객단가) API
 4. TourAPI 데이터 월 1회 주기 수집 배치 스케줄링
@@ -305,7 +305,7 @@ com.eodegano.cocobackend/
 - **BOQ5. 공유 링크 만료 정책** — 스냅샷 TTL(무제한 vs. N일) 및 삭제 정책 확정 필요.
 - **BOQ6. 카카오 OAuth 처리 방식** — ✅ **확정·구현 완료 (v0.2.7)**: FE에서 발급된 카카오 AccessToken을 `POST /api/v1/auth/oauth/kakao/callback`으로 전달 → `KakaoApiClient`로 카카오 사용자 정보 검증 → 자체 JWT 발급. 기존 로컬 계정과 이메일 일치 시 카카오 연결, 신규 사용자는 자동 가입.
 - **BOQ7. 추천 코스 생성 주체** — 기본 추천 코스를 Groq AI가 생성하는지(현재 방식), `stars`·`likes` 기반 알고리즘으로 전환하는지, 또는 병행하는지 확정 필요. (FE PRD OQ9)
-- **BOQ8. 데이터 커버리지 범위** — 경주·포항·영덕·안동 우선 처리 시 시군구 필터 플래그를 `mst_sigungu` 기준정보로 관리할지 하드코딩할지 결정 필요. (v0.5.0: 로컬 캐시 없이 라이브 조회이므로 "데이터 보유 여부"의 의미가 "TourAPI가 해당 시군구 데이터를 제공하는가"로 재정의됨)
+- **BOQ8. 데이터 커버리지 범위** (취소 — PO4 스코프아웃에 따라 논의 불필요)
 - **BOQ9. POI별 예산 오버라이드 저장** — `tour_course_user_defined_detail`에 `budget_override INT NULL` 컬럼 추가 여부. FE의 인라인 가격 수정값을 영속화하려면 필요.
 - **BOQ10. 코스 제목(title) 저장** — ✅ **확정·구현 완료**: `tour_course_user_defined.title VARCHAR(255) NULL` 컬럼 추가(DDL ALTER). 코스 제목 수정 API(`PATCH /{courseId}/title`) 구현 완료.
 - **BOQ11. 공유 기능 스키마** — ✅ **확정 (v0.2.6)**: `share_snapshot` 테이블·`share_token` 컬럼 미추가. FE가 카카오 SDK로 courseId 기반 딥링크를 생성하고, 수신자는 `GET /{courseId}/view` 공개 API로 조회하는 방식으로 결정.
