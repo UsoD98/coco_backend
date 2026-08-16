@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-08-16
+
+### Changed
+
+#### `tour_course_user_defined_detail.cost`에 음수 방지 CHECK 제약 추가
+
+전날(0.5.9) 신설한 `cost` 컬럼에 값 범위 제약이 없어 음수가 그대로 저장될 수 있었다. `NULL`은 "프론트가 아직 값을 보내지 않음"이라는 의미로 `resolveCost()` 폴백 로직(저장값 → TourAPI `usefee` → type별 기본값)의 판별 기준으로 쓰이고 있어 `NOT NULL` 전환은 보류하고, 음수만 DB 레벨에서 차단하도록 CHECK 제약만 추가했다.
+
+```sql
+ALTER TABLE tour_course_user_defined_detail
+    ADD CONSTRAINT chk_tour_course_user_defined_detail_cost
+    CHECK (cost IS NULL OR cost >= 0);
+```
+
+- `cost`는 계속 `INT NULL` 유지 — `NOT NULL DEFAULT 0`으로 바꾸면 `resolveCost()`가 `storedCost != null`을 "프론트 입력값 있음"으로 오판해 폴백(usefee/기본값)이 항상 무시되므로 채택하지 않음
+- 기존 601건 모두 `cost = NULL` 상태라 제약 추가 시 위반 없이 적용됨. 애플리케이션 코드 변경 없음
+
+### Files Changed
+
+- DB 스키마만 변경 (`tour_course_user_defined_detail` 테이블), 애플리케이션 코드 변경 없음
+
 ## [0.5.9] - 2026-08-16
 
 ### Changed
