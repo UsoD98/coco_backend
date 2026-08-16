@@ -109,6 +109,7 @@ com.eodegano.cocobackend/
 
 - **v0.5.0부터 로컬 DB 적재 폐지**: 공모전 규정상 관광 정보를 로컬에 저장할 수 없어, 경북(areaCode=35) + 시군구 코드 기반 조회를 매 요청 TourAPI 라이브 호출(`TourApiClient.areaBasedList2`)로 수행한다.
 - 라이브 호출 결과는 Caffeine 캐시(지역 후보 리스트, TTL 6h)를 경유해 응답 속도와 TourAPI 일일 호출한도를 보호한다.
+- **2026-08-16(v0.5.8) 개선**: 후보 리스트 수집을 7개 콘텐츠타입별로 분리(타입당 최대 3000건, 페이지 크기 100→300)해 물량이 큰 타입이 소형 타입을 밀어내는 편향을 줄이고, 페이지·타입을 가상 스레드로 병렬 수집해 콜드스타트 지연을 단축했다. 동시 HTTP 요청은 `Semaphore(4)`로 제한하고 429/5xx는 재시도(최대 3회) — 일일 호출 한도 1000건 기준 후보 캐시 워밍에 최대 280건/일을 쓰고 나머지는 상세조회용으로 남긴다. 배포 직후·TTL 만료 전에는 `PoiCacheWarmupScheduler`가 백그라운드로 캐시를 미리 채운다.
 - POI 개별 상세(`detailCommon2`/`detailIntro2`/`detailInfo2`)도 `contentId` 키로 별도 Caffeine 캐시(TTL 6h)에 담아 코스 생성·조회·공개 view가 공통 재사용한다.
 - 큐레이션 조회 API: 지역(sigunguCode)·인원 버킷(1/2/3-4)·테마·콘텐츠 유형을 파라미터로 받아 필터링된 POI 목록 반환 (좌표·썸네일·예산 기본값 포함). 필터링·정렬은 라이브 조회 결과를 애플리케이션 메모리에서 처리.
 - 별점(`stars`)·좋아요(`likes`)는 TourAPI에 없는 앱 자체 데이터이므로 `poi_rating` 테이블(`contentId` PK)에서 별도 관리 — 좋아요/평점 액션 시 on-demand 행 생성, TourAPI 존재 여부 재검증 없음.
@@ -223,6 +224,7 @@ com.eodegano.cocobackend/
 - JWT 기반 로컬 인증/인가 (로그인·로그아웃·토큰 갱신·회원 CRUD)
 - **카카오 OAuth 연동** (`POST /api/v1/auth/oauth/kakao/callback`) — FE 전달 카카오 AccessToken 검증, 신규 가입·기존 계정 연결·자체 JWT 발급 (`KakaoOAuthService` + `KakaoApiClient`)
 - **TourAPI 라이브 연동 + Caffeine 캐시 (v0.5.0)** — `TourApiClient` 라이브 호출, 지역 후보 리스트·POI 상세 각각 TTL 6h 캐시. 로컬 DB 적재(`DataMigrationController`)는 폐지
+- **후보 수집 방식 개선 + 캐시 워밍 (v0.5.8, 2026-08-16)** — 콘텐츠타입별 분리 수집·페이지 확대(100→300)·병렬 수집·재시도로 추천 범위 확장 및 콜드스타트 지연 단축. `PoiCacheWarmupScheduler`로 배포 직후·TTL 만료 전 백그라운드 워밍
 - Groq AI 여행 코스 생성 (`POST /api/v1/tour-course`) — 비로그인 허용, userId=null
 - `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장 (`duration_minutes` 포함)
 - **Tier 기반 확률적 POI 샘플링** — stars Hard exclusion + Tier A/B 분할 + likes 보조 정렬 (`TourCourseServiceImpl.selectByTypeQuota`)

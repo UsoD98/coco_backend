@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-08-16
+
+### Changed
+
+#### AI 코스 생성 POI 후보 풀 — TourAPI 수집 방식 개선 (범위 확장 + 속도 개선)
+
+기존 `TourLiveDataService.getAllCandidates()`는 `contentTypeId` 없이 전체 타입을 뭉쳐서 `areaBasedList2`를 페이지당 100건씩 순차 호출하며 최대 2000건까지만 채웠다. 경북 전체 관광데이터(7개 콘텐츠타입 × 23개 시군구)는 2000건보다 훨씬 많을 가능성이 높아, TourAPI 기본 정렬 순서상 앞쪽에 오지 못한 유형·지역은 후보 풀에 아예 들어오지 못했다 — 코스 생성 추천 범위가 좁게 느껴진 원인. 캐시가 6시간 TTL 단일 키(`'all'`)라 만료 후 최초 요청자는 최대 20회 순차 API 호출 지연을 그대로 떠안는 콜드스타트 문제도 있었다.
+
+- **타입별 분리 수집**: `PlaceType`의 7개 `contentTypeId`(12/14/15/28/32/38/39)로 나눠 각각 최대 3000건까지 수집 — 물량이 큰 타입(숙박·음식점)이 소형 타입(행사·레포츠 등)을 후보 풀에서 밀어내지 않도록 함
+- **페이지 크기 확대**: `numOfRows` 100 → 300 — 동일 범위를 더 적은 호출로 커버(일일 호출 한도 1000건 절약)
+- **페이지·타입 병렬 수집**: `TourApiClient.areaBasedListAll()`이 1페이지로 totalCount를 먼저 확인한 뒤 나머지 페이지를 가상 스레드로 병렬 수집. 신규 `areaBasedListAllByTypes()`가 7개 타입도 서로 병렬로 수집(중첩 `join()`이지만 가상 스레드라 데드락 없음)
+- **동시 요청 수 상한 + 재시도**: `TourApiClient.callApi()`에 `Semaphore(4)`로 실제 동시 HTTP 요청 수를 제한하고, 429/5xx 응답에 지수 백오프 재시도(최대 3회) 추가 — 문서화되지 않은 TourAPI 초당 제한에 대한 안전장치이자, Groq 클라이언트에는 있었으나 `TourApiClient`에는 없던 재시도 로직의 비대칭 해소
+- `getAllCandidates()`에 `@Cacheable(sync = true)` 추가 — 캐시 미스 시 동시 요청이 중복으로 TourAPI를 호출하지 않도록 방지
+
+**호출 예산 (일일 한도 1000건 기준)**: 후보 캐시 워밍 최악 280건/일(7타입 × 최대 10콜 × 4사이클/일), 나머지 ~720건/일은 PO3·CO1 등 상세조회(`detailCommon2`/`detailIntro2`/`detailInfo2`)용으로 남김. 소형 타입은 3000건 캡 이전에 totalCount로 조기 종료되어 실사용량은 이보다 낮을 것으로 예상.
+
+### Added
+
+#### `PoiCacheWarmupScheduler` — POI 후보 캐시 워밍
+
+실사용자가 콜드 캐시(최초 요청 시 타입별 TourAPI 호출)를 밟지 않도록, 배포 직후와 TTL(6h) 만료 직전에 백그라운드로 후보 캐시를 미리 채운다.
+
+- `ApplicationReadyEvent` 시점에 가상 스레드로 1회 초기 워밍 — CI/CD가 `main` push마다 재배포하는 구조(INF5)라 재배포 직후 첫 사용자가 콜드스타트를 밟는 걸 방지
+- `@Scheduled(fixedRate = 5시간50분)`로 TTL 만료 전 evict 후 재조회 — 신규 `TourLiveDataService.evictCandidatesCache()`(`@CacheEvict`) 호출 후 `getAllCandidates()` 재호출. 스케줄러가 별도 빈이라 Spring 프록시를 정상적으로 타 self-invocation 문제 없음
+- `CacheConfig`에 `@EnableScheduling` 추가
+
+### Testing
+
+`TourLiveDataServiceTest.getAllCandidatesSuccess`를 타입별 호출 구조(7개 `contentTypeId` 중 1개만 데이터 있고 나머지는 빈 페이지)에 맞춰 수정. 전체 69건 테스트 통과.
+
+### Files Created (1 file)
+
+- `src/main/java/com/eodegano/cocobackend/service/PoiCacheWarmupScheduler.java`
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/dataMig/service/TourApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourLiveDataService.java`
+- `src/main/java/com/eodegano/cocobackend/config/CacheConfig.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourLiveDataServiceTest.java`
+
 ## [0.5.7] - 2026-08-16
 
 ### Fixed

@@ -165,10 +165,10 @@
 ## 3. POI 데이터 (Points of Interest)
 
 ### PO1. TourAPI 라이브 조회 (v0.5.0 — 배치 적재 폐지)
-- **설명**: ~~한국관광공사 TourAPI `areaBasedList` → 경북(areaCode=35) 전체 시군구·콘텐츠 유형별 수집 → `tour` 테이블 적재~~. **v0.5.0부터 로컬 적재 자체가 공모전 규정 위반**이라 폐지. 대신 `TourApiClient`로 `areaBasedList2`/`detailCommon2`/`detailIntro2`/`detailInfo2`를 요청 시점 라이브 호출하고, Caffeine 캐시(지역 후보 리스트·POI 상세 각각 TTL 6h)를 경유해 응답 속도·호출한도를 보호한다.
-- **상태**: TourAPI 오류 → 해당 요청 실패 응답(재시도 없음, 배치가 아니므로) / 성공 → 캐시에 저장 후 반환.
+- **설명**: ~~한국관광공사 TourAPI `areaBasedList` → 경북(areaCode=35) 전체 시군구·콘텐츠 유형별 수집 → `tour` 테이블 적재~~. **v0.5.0부터 로컬 적재 자체가 공모전 규정 위반**이라 폐지. 대신 `TourApiClient`로 `areaBasedList2`/`detailCommon2`/`detailIntro2`/`detailInfo2`를 요청 시점 라이브 호출하고, Caffeine 캐시(지역 후보 리스트·POI 상세 각각 TTL 6h)를 경유해 응답 속도·호출한도를 보호한다. **2026-08-16(v0.5.8) 개선**: 후보 리스트 수집을 `contentTypeId` 없는 단일 호출(2000건 캡)에서 7개 콘텐츠타입별 분리 수집(타입당 최대 3000건)으로 전환 — 물량이 큰 타입이 소형 타입을 후보 풀에서 밀어내던 문제 해소. 페이지 크기 100→300, 페이지·타입 병렬 수집(가상 스레드) 추가.
+- **상태**: TourAPI 오류 → 429/5xx는 지수 백오프 재시도(최대 3회) 후에도 실패 시 해당 페이지 결과 실패 처리 / 성공 → 캐시에 저장 후 반환.
 - **MVP**: ✅
-- **구현 상태**: 🔧 (`TourApiClient`는 기존 존재·재사용, 캐시 계층·요청 시점 라이브 조회 서비스는 신규 구현 필요)
+- **구현 상태**: ✅ (`TourApiClient` 라이브 호출 + `Semaphore(4)` 동시 요청 제한 + 재시도, `TourLiveDataService.getAllCandidates()` 타입별 병렬 수집, `PoiCacheWarmupScheduler`로 배포 직후·TTL 만료 전 백그라운드 워밍)
 - **FE 의존**: 없음 (인프라).
 - **가치**: 모든 POI·예산·코스 기능의 데이터 원천 (배치 대신 요청 시점 실시간 원천으로 전환).
 
@@ -359,11 +359,11 @@
 
 ### DA5. TourAPI 응답 캐싱 (Caffeine) — **신규 (v0.5.0)**
 - **설명**: 로컬 DB 미저장 원칙에 따라 매 요청 TourAPI 라이브 호출이 되면서 발생하는 응답 지연·호출한도 소진 리스크를 완화하기 위한 인프로세스 캐시 계층. 캐시 2종, 둘 다 TTL 6시간:
-  - 지역 POI 후보 리스트 캐시 (코스 생성용 `areaBasedList2` 결과, 시군구 조합 키)
+  - 지역 POI 후보 리스트 캐시 (코스 생성용 `areaBasedList2` 결과, 단일 키 `'all'` — 7개 콘텐츠타입별로 나눠 수집한 뒤 하나로 병합해 캐싱. v0.5.8부터 시군구별이 아닌 전체 후보를 한 번에 담고 애플리케이션 메모리에서 시군구 필터링)
   - POI 개별 상세 캐시 (`detailCommon2`/`detailIntro2`/`detailInfo2` 결과, `contentId` 키) — 코스 생성(CO1)·코스 조회(CO4)·공개 뷰(SH2)·POI 상세 조회(PO3)에서 공통 재사용
-- **상태**: 캐시 히트 → TourAPI 호출 없이 즉시 반환 / 캐시 미스·만료 → 라이브 호출 후 캐시 적재.
+- **상태**: 캐시 히트 → TourAPI 호출 없이 즉시 반환 / 캐시 미스·만료 → 라이브 호출 후 캐시 적재. v0.5.8부터 `getAllCandidates()`는 `sync=true`라 캐시 미스 시 동시 요청이 중복 호출하지 않음.
 - **MVP**: ✅ (v0.5.0 전환의 필수 구성요소)
-- **구현 상태**: ✅ (`CacheConfig`에 `spring-boot-starter-cache` + `com.github.ben-manes.caffeine:caffeine` 의존성 기반 `CaffeineCacheManager` 구성 완료 — `poiCandidates`·`poiDetail`·`poiFullDetail` 3종 캐시, 전부 TTL 6h·`maximumSize(2000)`. `TourLiveDataService.getAllCandidates()`/`getDetail()`/`getFullDetail()`이 `@Cacheable`로 각 캐시 실사용 중, PO1~PO3·CO1·CO4·SH2 전부 재사용)
+- **구현 상태**: ✅ (`CacheConfig`에 `spring-boot-starter-cache` + `com.github.ben-manes.caffeine:caffeine` 의존성 기반 `CaffeineCacheManager` 구성 완료 — `poiCandidates`·`poiDetail`·`poiFullDetail` 3종 캐시, 전부 TTL 6h·`maximumSize(2000)`. `TourLiveDataService.getAllCandidates()`/`getDetail()`/`getFullDetail()`이 `@Cacheable`로 각 캐시 실사용 중, PO1~PO3·CO1·CO4·SH2 전부 재사용. **v0.5.8 추가**: `PoiCacheWarmupScheduler`가 배포 직후(`ApplicationReadyEvent`) 및 TTL 만료 전(5시간50분 주기)에 후보 캐시를 백그라운드로 미리 채워, 실사용자가 콜드스타트를 밟지 않도록 함)
 - **FE 의존**: 없음 (인프라, 응답 속도에 간접 영향).
 - **가치**: 1GB 메모리 프리티어 서버에서 별도 인프라(Redis 등) 없이 TourAPI 호출량·응답 지연을 실질적으로 절감.
 
