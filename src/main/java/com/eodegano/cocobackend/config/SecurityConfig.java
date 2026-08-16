@@ -110,6 +110,12 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
             .authorizeHttpRequests(auth -> auth
+                // CORS preflight — anyRequest().authenticated()로 막히면 브라우저가 보내는
+                // OPTIONS 요청에 Authorization 헤더가 없어 인증 필요 API 호출이 전부 CORS 에러로 실패함
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/test").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/api/v1/user/join").permitAll()
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/user/**").hasAnyRole("USER", "ADMIN")
@@ -125,7 +131,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/user/{userId}").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/poi/*/like").hasAnyRole("USER", "ADMIN")
                 .requestMatchers("/api/v1/poi/**").permitAll()
-                .anyRequest().permitAll()
+                .anyRequest().authenticated()
             );
 
         return http.build();

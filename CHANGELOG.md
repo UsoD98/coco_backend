@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-08-16
+
+### Fixed
+
+#### `SecurityConfig` — 운영 배포에 맞춰 인가 규칙 정리 (`anyRequest().permitAll()` → `authenticated()`)
+
+테스트 편의를 위해 걸어뒀던 catch-all `anyRequest().permitAll()`을 운영 배포에 맞춰 `authenticated()`로 전환했다. 이 규칙에 걸리는 요청 자체가 없어야 정상이지만(모든 컨트롤러 엔드포인트는 이미 개별 규칙으로 커버됨), 앞으로 신규 엔드포인트가 추가될 때 SecurityConfig에 규칙을 깜빡해도 기본값이 "인증 필요"가 되도록 방어선을 세운 것.
+
+- `docs/FEATURES_BACK.md`·`CHANGELOG.md`(AU/US/PO/CO/SH 각 기능 블록)를 근거로 컨트롤러 5개(Auth/User/Poi/TourCourse/Test) 전체 엔드포인트를 대조 — `anyRequest()` 전환 전 이미 개별 규칙으로 인증 필요/불필요가 모두 정확히 커버되어 있었음(예: `PATCH /api/v1/tour-course/*`는 0.5.5에서 이미 보완됨). 신규로 인가 규칙이 빠져있던 엔드포인트는 없었음
+- **`OPTIONS /**` permitAll 추가**: `anyRequest().permitAll()`에 가려 드러나지 않았던 문제 — `authenticated()`로 바꾸면 브라우저가 보내는 CORS preflight(OPTIONS, Authorization 헤더 없음) 요청이 인증 필요 엔드포인트(PATCH/DELETE 등)에서 401로 막혀 프론트 쪽에서 CORS 에러로 보임. Security 필터 체인에서 OPTIONS 메서드는 전 경로 permitAll 처리
+- **`/test`(`TestController` 헬스체크) permitAll 추가**: 문서화되지 않았던 배포 확인용 진단 엔드포인트. 민감정보 없이 "서버 정상 동작" 문자열만 반환하므로 인증 없이 curl로 배포 확인 가능해야 함
+- **`/actuator/health` permitAll 추가**: `spring-boot-starter-actuator` 의존성은 있으나 `SecurityConfig`에 규칙이 없어 `anyRequest()` 전환 시 함께 막힐 뻔했음. 기본 노출 엔드포인트(UP/DOWN 상태만 반환, 민감정보 없음)라 표준 관례대로 공개
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/config/SecurityConfig.java`
+- `CHANGELOG.md`
+
 ## [0.5.6] - 2026-08-15
 
 ### Fixed
