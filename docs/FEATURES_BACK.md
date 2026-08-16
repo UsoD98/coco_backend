@@ -176,7 +176,7 @@
 - **설명**: 지역(sigunguCode)·인원 버킷(1/2/3-4)·테마·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일, 예상 객단가 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리.
 - **상태**: TourAPI가 데이터 없는 시군구 응답 → 빈 배열 + `available: false` 플래그 / 성공 → 200.
 - **MVP**: ✅
-- **구현 상태**: 🔧 (`GET /api/v1/poi` 구현됨 — `sigunguCode`(필수)·`contentTypeId`(선택) 필터만 동작. `peopleCount`는 필수 파라미터로만 받고 필터링에는 미사용(BU2 스코프 아웃), `theme`은 파라미터 자체 미수신, `avgPrice`는 항상 `null` 반환. 근거: [PRD_BACK.md BOQ14](PRD_BACK.md))
+- **구현 상태**: 🔧 (`GET /api/v1/poi` 구현됨 — `sigunguCode`(필수)·`contentTypeId`(선택) 필터만 동작. `peopleCount`는 필수 파라미터로만 받고 필터링에는 미사용(BU2 스코프 아웃), `theme`은 파라미터 자체 미수신, `avgPrice`는 BU1 취소로 항상 `null` 반환)
 - **FE 의존**: S2 플래너 좌측 결과 영역 (P2).
 - **가치**: F1 인원수 기반 큐레이션의 핵심 응답.
 
@@ -184,7 +184,7 @@
 - **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유).
 - **상태**: TourAPI에 존재하지 않는 contentId → 404 / 성공 → 200.
 - **MVP**: ✅
-- **구현 상태**: ✅ (`GET /api/v1/poi/{contentId}`, 인증 불필요) — `avgPrice`는 BOQ14 미확정으로 항상 `null` 반환 (PO2와 동일)
+- **구현 상태**: ✅ (`GET /api/v1/poi/{contentId}`, 인증 불필요) — `avgPrice`는 BU1 취소로 항상 `null` 반환 (PO2와 동일)
 - **FE 의존**: S2a POI 상세 드로어.
 - **가치**: 사용자가 코스 추가 전 상세 정보를 확인하는 핵심 API.
 
@@ -212,7 +212,6 @@
 - **구현 상태**: ✅ (`POST /api/v1/tour-course`) — 비로그인 허용, userId=null 저장.
 - **FE 의존**: S2 플래너 (기본 추천 코스 P4, AI 코스 생성 연계).
 - **가치**: 핵심 차별점 — 인원·테마 맞춤 자동 일정 생성.
-- **⚠️ 스키마 갭**: POI별 예산 오버라이드 저장 불가(BOQ9).
 
 ### CO7. 코스 제목 수정
 - **설명**: 로그인 사용자가 본인 코스의 제목(`title`)만 단독으로 수정. 소유권 확인 후 `TourCourseUserDefined.updateTitle()` 호출.
@@ -277,13 +276,10 @@
 
 ## 5. 예산 (Budget)
 
-### BU1. 음식점 평균 객단가 제공 ⚠️
-- **설명**: ~~`food.lclsSystm3`(소분류코드)로 `food_avg_price.lclsSystm3`을 조인해 음식점 소분류별 평균 식비 근사치를 POI 응답에 포함~~. **v0.5.0 재설계 필요**: 근거였던 `food`·`food_avg_price` 테이블이 로컬 DB 미저장 원칙에 따라 제거됨. TourAPI 라이브 응답에는 소분류별 평균 객단가가 없어 대체 데이터 소스(외식통계 API 등) 또는 기능 축소 여부 결정 필요. (BOQ14, [PRD_BACK.md](PRD_BACK.md))
-- **상태**: (재설계 전까지 보류)
-- **MVP**: ✅ → 🔶 재검토
-- **구현 상태**: ❌ (근거 테이블 소실로 기존 🔧 상태에서 후퇴)
-- **FE 의존**: S2 플래너 예산 대시보드 (P9), POI 상세 드로어 (S2a).
-- **가치**: P2 — 예산 시뮬레이션의 식비 기본값.
+### BU1. 음식점 평균 객단가 제공 (취소, 2026-08-16)
+- **설명**: 서버 측 평균 객단가 산정 자체를 취소. 근거 데이터 소스가 없어 정확도를 담보할 수 없다고 판단, FE가 사용자로부터 실제 비용을 직접 입력받아 BE에 저장하는 방식(BU4)으로 대체.
+- **MVP**: ❌ 제외
+- **구현 상태**: ❌ (의도적 미구현, 재검토 예정 없음)
 
 ### BU2. 숙박 인원별 적합 숙소 분류 ❌ 스코프 아웃 (2026-08-08)
 - **설명**: ~~`AccommodationDetailInfo`의 객실 수용 인원·요금 정보를 분석해 인원 버킷(1/2/3-4) 적합도 태그 및 1박 기준 예상 비용 제공~~. 근거였던 `accommodation_detail_info` 테이블이 로컬 DB 미저장 원칙에 따라 제거됨. **2026-08-08 기획 결정: 재설계 없이 기능 자체를 스코프 아웃** — `GET /api/v1/poi`의 `peopleCount`는 필수 입력값으로만 받고 숙박(contentTypeId=32) 필터링에는 사용하지 않음.
@@ -293,21 +289,18 @@
 - **FE 의존**: 없음 (peopleCount는 파라미터로만 수신, 필터링 미적용).
 - **가치**: P1/P2 — 인원 맞춤 숙소 + 숙박비 예산 기본값.
 
-### BU3. 교통비 추정 계산 및 제공
-- **설명**: 코스 내 POI 순서대로 좌표(mapx/mapy) 기반 이동거리 계산 → 이동수단(`TransportType`: CAR/PUBLIC_TRANSPORT/WALK)별 교통비 추정값 산출 → 응답에 포함. `TourCourseUserDefined.transport` 컬럼 값을 기준으로 계산. **v0.5.0**: 좌표 출처가 로컬 `tour.mapx`/`tour.mapy` → TourAPI 라이브 조회(PO1 캐시) 응답의 `mapx`/`mapy`로 변경.
-- **상태**: 좌표 누락 POI → 해당 구간 0 처리 / 성공 → 추정값 반환.
-- **MVP**: ✅
-- **구현 상태**: ❌ (계산 로직 및 API 미구현)
-- **FE 의존**: S2 플래너 예산 대시보드 교통비 항목 (P11).
-- **가치**: P2 — 숙식+교통 포함 전체 여정 예산.
+### BU3. 교통비 추정 계산 및 제공 (취소, 2026-08-16)
+- **설명**: 이동 관련 비용 계산은 BE가 아닌 FE에서 전담하기로 결정. BE는 관련 로직을 구현하지 않는다.
+- **MVP**: ❌ 제외
+- **구현 상태**: ❌ (의도적 미구현, 재검토 예정 없음)
 
-### BU4. POI별 예산 오버라이드 저장 ⚠️
-- **설명**: FE에서 사용자가 수정한 POI별 금액을 `tour_course_user_defined_detail`에 영속화. 현재 스키마에 `budget_override` 컬럼이 없어 구현 불가.
-- **상태**: (스키마 변경 후) 오버라이드 없음 → null / 있음 → override 값 우선 반환.
+### BU4. POI별 비용 저장 ✅
+- **설명**: FE가 산정한 POI별 실제 비용(입장료·식비·숙박비 등, 이동비 포함 여부는 FE 재량)을 `tour_course_user_defined_detail.cost`에 그대로 저장. BE는 별도의 평균가·추정 로직 없이 입력값을 신뢰해 영속화만 담당. 코스 조회(CO4)·공개 뷰(SH2) 응답 시 저장된 `cost`를 우선 반환하고, 값이 없는 기존/AI 생성 일정은 기존과 동일하게 TourAPI 라이브 응답(`usefee`) → type별 기본값 순으로 폴백.
+- **상태**: 저장된 `cost` 있음 → 그 값 반환 / 없음 → 라이브 조회·기본값 폴백 반환.
 - **MVP**: ✅
-- **구현 상태**: ❌ (`tour_course_user_defined_detail`에 `budget_override INT NULL` 컬럼 추가 필요. BOQ9)
+- **구현 상태**: ✅ (`tour_course_user_defined_detail.cost INT NULL` 컬럼 추가 완료(2026-08-16, BOQ9 확정). `PUT /api/v1/tour-course/{courseId}`(`TourCourseUpdateRequestDto.PlaceUpdate.cost`)로 저장, `TourCourseServiceImpl.resolveCost()`가 저장값 우선 반영)
 - **FE 의존**: S2 플래너 인라인 가격 수정 (P10).
-- **가치**: P2 — 사용자 수정값이 저장되지 않으면 재방문 시 초기화됨.
+- **가치**: P2 — 사용자가 입력한 실제 비용이 저장되지 않으면 재방문 시 초기화됨.
 
 ---
 
@@ -343,8 +336,8 @@
 - **구현 상태**: ❌ (해당 없음)
 - **FE 의존**: 없음.
 
-### DA3. FoodAvgPrice 데이터 적재 — ❌ v0.5.0 폐지
-- **설명**: ~~음식점 소분류(`lclsSystm3`)별 평균 객단가를 외식통계 또는 수동 입력으로 `food_avg_price` 테이블에 적재~~. **`food_avg_price` 테이블이 로컬 DB 미저장 원칙에 따라 제거됨.** BU1 재설계(BOQ14) 결과에 따라 대체 방식 결정 필요.
+### DA3. FoodAvgPrice 데이터 적재 — ❌ v0.5.0 폐지, 2026-08-16 재검토 종료
+- **설명**: ~~음식점 소분류(`lclsSystm3`)별 평균 객단가를 외식통계 또는 수동 입력으로 `food_avg_price` 테이블에 적재~~. **`food_avg_price` 테이블이 로컬 DB 미저장 원칙에 따라 제거됨.** BU1이 취소되어 대체 방식 검토도 종료 (재검토 예정 없음).
 - **구현 상태**: ❌ (제거됨)
 - **FE 의존**: 없음.
 
@@ -380,9 +373,10 @@ FE MVP 기준으로 백엔드 미구현 항목 우선순위를 나열한다.
 | ~~1~~ | ~~INF4~~ | ~~CORS 설정~~ | ~~FE-BE 통신 전제, 모든 API 사용 전 필요~~ — ✅ 구현 완료 |
 | ~~2~~ | ~~DA5~~ | ~~Caffeine 캐시 계층~~ | ~~v0.5.0 라이브 호출 구조 전환의 선결 조건~~ — ✅ 구현 완료 |
 | ~~3~~ | ~~PO4~~ | ~~시군구 목록·플래그~~ | 취소 |
-| 4 | PO2 | 큐레이션 POI 목록 | S2 플래너 핵심 데이터 — API 자체는 구현됨(GBC017), `peopleCount`/`theme`/`avgPrice` 미완성(BOQ14)으로 🔧 유지 |
+| 4 | PO2 | 큐레이션 POI 목록 | S2 플래너 핵심 데이터 — API 자체는 구현됨(GBC017), `peopleCount`/`theme` 미완성, `avgPrice`는 BU1 취소로 항상 null (의도된 동작)으로 🔧 유지 |
 | ~~5~~ | ~~PO3~~ | ~~POI 상세 통합 조회~~ | ~~S2a 상세 드로어~~ — ✅ 구현 완료 |
-| 6 | BU3 | 교통비 추정 | S2 예산 대시보드 |
+| ~~6~~ | ~~BU3~~ | ~~교통비 추정~~ | 취소 — FE 전담 |
+| ~~7~~ | ~~BU4~~ | ~~POI별 비용 저장~~ | ~~S2 예산 대시보드 인라인 수정~~ — ✅ 구현 완료 |
 
 > ❌ v0.5.0에서 DA1~DA3(TourAPI 배치 수집·스케줄링·FoodAvgPrice 적재) 폐지 — 로컬 DB 미저장 원칙에 따라 대상 자체가 사라짐.
 
@@ -393,11 +387,11 @@ FE MVP 기준으로 백엔드 미구현 항목 우선순위를 나열한다.
 
 | BOQ | 내용 | 영향 기능 | 상태 |
 | --- | --- | --- | --- |
-| BOQ9 | `tour_course_user_defined_detail.budget_override` 컬럼 추가 여부 | BU4 예산 오버라이드 저장 | 미확정 |
+| BOQ9 | `tour_course_user_defined_detail`에 비용 컬럼 추가 여부 | BU4 POI별 비용 저장 | ✅ 확정 (2026-08-16): `budget_override`(오버라이드 개념) 대신 단순 `cost INT NULL` 컬럼 추가 — FE 입력값을 그대로 저장 |
 | BOQ11 | 공유 스키마: `share_token` 컬럼 재추가 vs. 별도 `share_snapshot` 테이블 | SH1/SH2 공유 기능 | ✅ 확정: 별도 스냅샷 없이 courseId 직접 공개 뷰로 처리 |
 | BOQ12 | `stars` 데이터 수집 방법 확정 (`likes`는 PO5로 수집 중) | DA4, CO6 알고리즘 추천 | 미확정 (AI 검색 수동 입력 예정) |
 | BOQ13 | Caffeine 캐시 TTL | DA5, PO1~PO3, CO1, CO4, SH2 | ✅ 확정 (v0.5.0): 지역 후보 리스트·POI 상세 모두 TTL 6h |
-| BOQ14 | BU1 근거 테이블(`food_avg_price`) 소실에 따른 예산 메타데이터 재설계. BU2는 2026-08-08 스코프 아웃 확정(재설계 대상 아님) | BU1, DA3 | 🔶 BU1만 미확정 |
+| BOQ14 | BU1 근거 테이블(`food_avg_price`) 소실에 따른 예산 메타데이터 재설계 | BU1, DA3 | ✅ 확정 (2026-08-16): 재설계하지 않고 BU1 기능 자체 취소. BU4(비용 직접 입력)로 대체 |
 
 **Post-MVP 로드맵**
 

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-08-16
+
+### Changed
+
+#### 예산 관련 설계 변경 — 교통비 추정(BU3)·음식점 평균 객단가(BU1) 취소, POI별 비용은 프론트 입력값을 그대로 저장
+
+기획 재검토 결과 이동 관련 비용 계산은 프론트엔드가 전담하기로 했고, 음식점 평균 객단가도 근거 데이터(`food_avg_price`)가 로컬 DB 미저장 원칙으로 사라진 뒤 대체 소스 없이는 정확도를 담보할 수 없다고 판단해 서버 측 산정 로직을 모두 걷어냈다. 대신 프론트가 산정한 POI별 실제 비용을 그대로 받아 저장만 하는 단순한 구조로 전환.
+
+- `tour_course_user_defined_detail`에 `cost INT NULL` 컬럼 추가 (BOQ9 확정 — `budget_override`라는 "오버라이드" 개념 대신 사용자 입력값을 그대로 저장하는 단순 `cost` 컬럼으로 결정)
+- `TourCourseUpdateRequestDto.PlaceUpdate.cost` 추가 — `PUT /api/v1/tour-course/{courseId}`로 프론트가 입력한 비용을 저장
+- `TourCourseServiceImpl.resolveCost()`가 저장된 `cost`를 최우선으로 사용하도록 변경 (없으면 기존처럼 TourAPI 라이브 `usefee` → type별 기본값 순으로 폴백) — 코스 상세 조회(CO4)·공개 뷰(SH2) 응답에 반영
+- BU3(교통비 추정)·BU1(음식점 평균 객단가) 기능 취소 — 관련 계산 로직은 구현하지 않음 (BOQ2·BOQ3·BOQ14 확정)
+
+### Testing
+
+`TourCourseServiceImplTest`의 `PlaceUpdate` 생성자 호출 3곳에 `cost` 인자 추가. 전체 테스트 통과.
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/domain/TourCourseUserDefinedDetail.java`
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseUpdateRequestDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
 ## [0.5.8] - 2026-08-16
 
 ### Changed
