@@ -126,12 +126,16 @@ com.eodegano.cocobackend/
 - AI 응답 검증(날짜 범위, contentId 실존, PlaceType 유효성) 후 `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장.
 - 비로그인(userId=null) 허용으로 생성 후 저장까지 동작.
 
-**중기 목표 (v1.0+ — 순수 알고리즘 추천)**
+**v1.0 목표 (공모전 출시) — 2026-08-16 확정**
+- CO1(Groq AI 코스 생성)을 그대로 유지한다. stars/likes 기반 Tier 샘플링(v0.2.6)까지는 v1에 포함되지만, Groq 자체를 대체하는 순수 알고리즘 전환은 v1 범위에서 제외한다.
+- 사유: 현재 Groq 기반 추천 품질이 충분히 좋다고 판단 — 무리하게 알고리즘으로 전환하기보다 출시 후 더 나은 설계가 확보되면 그때 붙인다.
+
+**중기 목표 (v2.0+ 고도화 — 보류, v1 이후 재검토)**
 - Tier 샘플링에서 나아가 Groq 완전 제거.
 - `poi_rating.stars`·`poi_rating.likes` 스코어링 결과로 직접 Day별 일정 조합.
 - TourAPI 라이브 조회(캐시 경유) 결과의 지역코드(`LDONGSIGNGUCD`) + `contenttypeid` + 스코어 기반 정렬 규칙 엔진으로 구현.
 
-**최종 목표 (v1.0+ — 순수 알고리즘 추천)**
+**최종 목표 (v3.0+ 고도화 — 보류, v1 이후 재검토)**
 - Groq API 호출 없이 여행자가 입력한 조건(인원 버킷·테마·이동수단·기간·시군구)과 POI의 `stars`·`likes`를 결합한 스코어링 알고리즘으로 Day별 최적 코스 자동 생성.
 - 사용자 `travel_type`(개인 선호 여행 타입)을 추가 가중치로 반영.
 - 외부 LLM 의존 제거 → 응답 속도 향상·비용 절감·예측 가능성 확보.
