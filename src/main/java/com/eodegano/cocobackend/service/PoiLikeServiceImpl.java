@@ -8,6 +8,7 @@ import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.UserPoiLikeRepository;
 import com.eodegano.cocobackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PoiLikeServiceImpl implements PoiLikeService {
 
     private final UserRepository userRepository;
@@ -32,6 +34,7 @@ public class PoiLikeServiceImpl implements PoiLikeService {
         User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
+        log.info("User {} liked contentId {}", user.getEmail(), contentId);
         Optional<UserPoiLike> existing = userPoiLikeRepository.findByUserIdAndContentId(user.getId(), contentId);
 
         boolean liked;

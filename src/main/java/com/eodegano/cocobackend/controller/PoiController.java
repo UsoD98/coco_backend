@@ -8,6 +8,7 @@ import com.eodegano.cocobackend.service.PoiCurationService;
 import com.eodegano.cocobackend.service.PoiDetailService;
 import com.eodegano.cocobackend.service.PoiLikeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/poi")
 @RequiredArgsConstructor
+@Slf4j
 public class PoiController {
 
     private final PoiLikeService poiLikeService;
@@ -45,6 +47,7 @@ public class PoiController {
     public ResponseEntity<ApiResponse<PoiLikeResponseDto>> toggleLike(
             @PathVariable Long contentId,
             Authentication authentication) {
+        log.info("authentication.getName() = {}", authentication.getName());
         PoiLikeResponseDto result = poiLikeService.toggleLike(contentId, authentication.getName());
         String msg = result.isLiked() ? "좋아요가 추가되었습니다." : "좋아요가 취소되었습니다.";
         return ResponseEntity.ok(ApiResponse.ok(msg, result));
