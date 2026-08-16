@@ -213,6 +213,7 @@ public class TourCourseServiceImpl implements TourCourseService {
                         .durationMinutes(place.getDurationMinutes())
                         .type(place.getType())
                         .contentId(place.getContentId())
+                        .cost(place.getCost())
                         .build());
             }
         }
@@ -320,7 +321,7 @@ public class TourCourseServiceImpl implements TourCourseService {
                                     .durationMinutes(d.getDurationMinutes())
                                     .thumbnailImg(thumbnailOf(summaryMap, d.getContentId()))
                                     .operatingHours(operatingHoursOf(detailMap, d.getContentId()))
-                                    .cost(resolveCost(d.getType(), detailMap.get(d.getContentId())))
+                                    .cost(resolveCost(d.getType(), detailMap.get(d.getContentId()), d.getCost()))
                                     .build())
                             .collect(Collectors.toList());
                     return TourCourseShareResponseDto.DailySchedule.builder()
@@ -387,6 +388,11 @@ public class TourCourseServiceImpl implements TourCourseService {
     }
 
     private Integer resolveCost(String type, PoiDetail detail) {
+        return resolveCost(type, detail, null);
+    }
+
+    private Integer resolveCost(String type, PoiDetail detail, Integer storedCost) {
+        if (storedCost != null) return storedCost;
         Integer liveCost = detail != null ? detail.cost() : null;
         if (liveCost != null) return liveCost;
         return DEFAULT_COST_BY_TYPE.get(type);
