@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -200,15 +201,20 @@ class TourLiveDataServiceTest {
     // ───────────────────────────────────────────────
 
     @Test
-    @DisplayName("getAllCandidates - areaBasedList2 결과를 PoiSummary로 매핑")
+    @DisplayName("getAllCandidates - 콘텐츠타입별로 areaBasedList2를 호출해 PoiSummary로 매핑")
     void getAllCandidatesSuccess() {
-        JsonNode page = json("""
+        JsonNode emptyPage = json("""
+                {"response":{"header":{"resultCode":"0000","resultMsg":"OK"},"body":{"items":"","numOfRows":0,"pageNo":1,"totalCount":0}}}
+                """);
+        JsonNode attractionPage = json("""
                 {"response":{"header":{"resultCode":"0000","resultMsg":"OK"},"body":{"items":{"item":[
                   {"contentid":"126289","contenttypeid":"12","title":"불국사","firstimage":"http://img.jpg",
                    "mapx":"129.3316","mapy":"35.7903","lDongSignguCd":"130"}
                 ]},"numOfRows":1,"pageNo":1,"totalCount":1}}}
                 """);
-        doReturn(page).when(api).areaBasedList(null, 1, 100);
+        // 타입별 분리 수집(A) — ATTRACTION(12)만 결과가 있고 나머지 6개 타입은 빈 페이지
+        doReturn(emptyPage).when(api).areaBasedList(anyInt(), eq(1), eq(300));
+        doReturn(attractionPage).when(api).areaBasedList(eq(12), eq(1), eq(300));
 
         var result = tourLiveDataService.getAllCandidates();
 
