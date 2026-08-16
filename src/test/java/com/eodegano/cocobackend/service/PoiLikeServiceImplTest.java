@@ -67,7 +67,7 @@ class PoiLikeServiceImplTest {
 
         assertThat(result.isLiked()).isTrue();
         assertThat(result.getLikes()).isEqualTo(1);
-        verify(userPoiLikeRepository).save(any(UserPoiLike.class));
+        verify(userPoiLikeRepository).saveAndFlush(any(UserPoiLike.class));
         verify(poiRatingRepository).save(any(PoiRating.class));
         verify(poiRatingRepository, never()).incrementLikes(any());
     }
@@ -103,6 +103,7 @@ class PoiLikeServiceImplTest {
         assertThat(result.isLiked()).isFalse();
         assertThat(result.getLikes()).isEqualTo(2);
         verify(userPoiLikeRepository).delete(existing);
+        verify(userPoiLikeRepository).flush();
         verify(poiRatingRepository).decrementLikes(CONTENT_ID);
     }
 

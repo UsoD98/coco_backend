@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.11] - 2026-08-16
+
+### Fixed
+
+#### POI 좋아요 등록/취소 시 user_poi_like 튜플이 저장되지 않던 문제 수정
+
+운영 배포 후 좋아요 API가 200을 응답하고 `poi_rating.likes` 카운트도 정상 증가하는데, `user_poi_like` 테이블에는 튜플이 생기지(또는 지워지지) 않는 현상이 보고됨.
+
+- 원인: `PoiRatingRepository.incrementLikes`/`decrementLikes`는 `@Modifying(clearAutomatically = true)` 벌크 UPDATE. `UserPoiLike`는 `@IdClass`로 PK를 애플리케이션에서 직접 세팅하는 구조라 `save()` 호출이 Spring Data JPA의 `isNew()` 오판으로 `merge()`를 타면서 즉시 flush되지 않고 영속성 컨텍스트에만 대기함. 이 상태에서 `poi_rating` 테이블만 건드리는 벌크 UPDATE가 실행되면 다른 테이블(`user_poi_like`)의 대기 변경은 auto-flush 대상에 포함되지 않고, 곧바로 `clearAutomatically=true`가 영속성 컨텍스트를 비워버려 아직 flush되지 않은 INSERT/DELETE가 DB에 반영되지 못한 채 유실됨. 벌크 UPDATE 자체는 즉시 SQL 실행이라 `likes` 카운트만 정상 반영된 것처럼 보였음
+- `PoiLikeServiceImpl.toggleLike`에서 `userPoiLikeRepository.save(...)` → `saveAndFlush(...)`, `delete(...)` 직후 `flush()` 호출을 추가해 벌크 업데이트가 컨텍스트를 비우기 전에 `user_poi_like` 변경사항이 먼저 DB에 반영되도록 수정
+- 디버깅용 `log.info`, `// todo 배포후 삭제` 주석 제거
+
+### Testing
+
+- `PoiLikeServiceImplTest`: `save()` 대신 `saveAndFlush()` 호출을 검증하도록 수정, 좋아요 취소 케이스에 `flush()` 호출 검증 추가
+
+### Files Changed (3 files)
+
+- `src/main/java/com/eodegano/cocobackend/controller/PoiController.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiLikeServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiLikeServiceImplTest.java`
+
 ## [0.5.10] - 2026-08-16
 
 ### Changed
