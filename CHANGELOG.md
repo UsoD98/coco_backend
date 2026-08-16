@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-08-16
+
+### Changed
+
+#### `tour_course_user_defined_detail.cost`에 음수 방지 CHECK 제약 추가
+
+전날(0.5.9) 신설한 `cost` 컬럼에 값 범위 제약이 없어 음수가 그대로 저장될 수 있었다. `NULL`은 "프론트가 아직 값을 보내지 않음"이라는 의미로 `resolveCost()` 폴백 로직(저장값 → TourAPI `usefee` → type별 기본값)의 판별 기준으로 쓰이고 있어 `NOT NULL` 전환은 보류하고, 음수만 DB 레벨에서 차단하도록 CHECK 제약만 추가했다.
+
+```sql
+ALTER TABLE tour_course_user_defined_detail
+    ADD CONSTRAINT chk_tour_course_user_defined_detail_cost
+    CHECK (cost IS NULL OR cost >= 0);
+```
+
+- `cost`는 계속 `INT NULL` 유지 — `NOT NULL DEFAULT 0`으로 바꾸면 `resolveCost()`가 `storedCost != null`을 "프론트 입력값 있음"으로 오판해 폴백(usefee/기본값)이 항상 무시되므로 채택하지 않음
+- 기존 601건 모두 `cost = NULL` 상태라 제약 추가 시 위반 없이 적용됨. 애플리케이션 코드 변경 없음
+
+### Files Changed
+
+- DB 스키마만 변경 (`tour_course_user_defined_detail` 테이블), 애플리케이션 코드 변경 없음
+
+## [0.5.9] - 2026-08-16
+
+### Changed
+
+#### 예산 관련 설계 변경 — 교통비 추정(BU3)·음식점 평균 객단가(BU1) 취소, POI별 비용은 프론트 입력값을 그대로 저장
+
+기획 재검토 결과 이동 관련 비용 계산은 프론트엔드가 전담하기로 했고, 음식점 평균 객단가도 근거 데이터(`food_avg_price`)가 로컬 DB 미저장 원칙으로 사라진 뒤 대체 소스 없이는 정확도를 담보할 수 없다고 판단해 서버 측 산정 로직을 모두 걷어냈다. 대신 프론트가 산정한 POI별 실제 비용을 그대로 받아 저장만 하는 단순한 구조로 전환.
+
+- `tour_course_user_defined_detail`에 `cost INT NULL` 컬럼 추가 (BOQ9 확정 — `budget_override`라는 "오버라이드" 개념 대신 사용자 입력값을 그대로 저장하는 단순 `cost` 컬럼으로 결정)
+- `TourCourseUpdateRequestDto.PlaceUpdate.cost` 추가 — `PUT /api/v1/tour-course/{courseId}`로 프론트가 입력한 비용을 저장
+- `TourCourseServiceImpl.resolveCost()`가 저장된 `cost`를 최우선으로 사용하도록 변경 (없으면 기존처럼 TourAPI 라이브 `usefee` → type별 기본값 순으로 폴백) — 코스 상세 조회(CO4)·공개 뷰(SH2) 응답에 반영
+- BU3(교통비 추정)·BU1(음식점 평균 객단가) 기능 취소 — 관련 계산 로직은 구현하지 않음 (BOQ2·BOQ3·BOQ14 확정)
+
+### Testing
+
+`TourCourseServiceImplTest`의 `PlaceUpdate` 생성자 호출 3곳에 `cost` 인자 추가. 전체 테스트 통과.
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/domain/TourCourseUserDefinedDetail.java`
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseUpdateRequestDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
+## [0.5.8] - 2026-08-16
+
+### Changed
+
+#### AI 코스 생성 POI 후보 풀 — TourAPI 수집 방식 개선 (범위 확장 + 속도 개선)
+
+기존 `TourLiveDataService.getAllCandidates()`는 `contentTypeId` 없이 전체 타입을 뭉쳐서 `areaBasedList2`를 페이지당 100건씩 순차 호출하며 최대 2000건까지만 채웠다. 경북 전체 관광데이터(7개 콘텐츠타입 × 23개 시군구)는 2000건보다 훨씬 많을 가능성이 높아, TourAPI 기본 정렬 순서상 앞쪽에 오지 못한 유형·지역은 후보 풀에 아예 들어오지 못했다 — 코스 생성 추천 범위가 좁게 느껴진 원인. 캐시가 6시간 TTL 단일 키(`'all'`)라 만료 후 최초 요청자는 최대 20회 순차 API 호출 지연을 그대로 떠안는 콜드스타트 문제도 있었다.
+
+- **타입별 분리 수집**: `PlaceType`의 7개 `contentTypeId`(12/14/15/28/32/38/39)로 나눠 각각 최대 3000건까지 수집 — 물량이 큰 타입(숙박·음식점)이 소형 타입(행사·레포츠 등)을 후보 풀에서 밀어내지 않도록 함
+- **페이지 크기 확대**: `numOfRows` 100 → 300 — 동일 범위를 더 적은 호출로 커버(일일 호출 한도 1000건 절약)
+- **페이지·타입 병렬 수집**: `TourApiClient.areaBasedListAll()`이 1페이지로 totalCount를 먼저 확인한 뒤 나머지 페이지를 가상 스레드로 병렬 수집. 신규 `areaBasedListAllByTypes()`가 7개 타입도 서로 병렬로 수집(중첩 `join()`이지만 가상 스레드라 데드락 없음)
+- **동시 요청 수 상한 + 재시도**: `TourApiClient.callApi()`에 `Semaphore(4)`로 실제 동시 HTTP 요청 수를 제한하고, 429/5xx 응답에 지수 백오프 재시도(최대 3회) 추가 — 문서화되지 않은 TourAPI 초당 제한에 대한 안전장치이자, Groq 클라이언트에는 있었으나 `TourApiClient`에는 없던 재시도 로직의 비대칭 해소
+- `getAllCandidates()`에 `@Cacheable(sync = true)` 추가 — 캐시 미스 시 동시 요청이 중복으로 TourAPI를 호출하지 않도록 방지
+
+**호출 예산 (일일 한도 1000건 기준)**: 후보 캐시 워밍 최악 280건/일(7타입 × 최대 10콜 × 4사이클/일), 나머지 ~720건/일은 PO3·CO1 등 상세조회(`detailCommon2`/`detailIntro2`/`detailInfo2`)용으로 남김. 소형 타입은 3000건 캡 이전에 totalCount로 조기 종료되어 실사용량은 이보다 낮을 것으로 예상.
+
+### Added
+
+#### `PoiCacheWarmupScheduler` — POI 후보 캐시 워밍
+
+실사용자가 콜드 캐시(최초 요청 시 타입별 TourAPI 호출)를 밟지 않도록, 배포 직후와 TTL(6h) 만료 직전에 백그라운드로 후보 캐시를 미리 채운다.
+
+- `ApplicationReadyEvent` 시점에 가상 스레드로 1회 초기 워밍 — CI/CD가 `main` push마다 재배포하는 구조(INF5)라 재배포 직후 첫 사용자가 콜드스타트를 밟는 걸 방지
+- `@Scheduled(fixedRate = 5시간50분)`로 TTL 만료 전 evict 후 재조회 — 신규 `TourLiveDataService.evictCandidatesCache()`(`@CacheEvict`) 호출 후 `getAllCandidates()` 재호출. 스케줄러가 별도 빈이라 Spring 프록시를 정상적으로 타 self-invocation 문제 없음
+- `CacheConfig`에 `@EnableScheduling` 추가
+
+### Testing
+
+`TourLiveDataServiceTest.getAllCandidatesSuccess`를 타입별 호출 구조(7개 `contentTypeId` 중 1개만 데이터 있고 나머지는 빈 페이지)에 맞춰 수정. 전체 69건 테스트 통과.
+
+### Files Created (1 file)
+
+- `src/main/java/com/eodegano/cocobackend/service/PoiCacheWarmupScheduler.java`
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/dataMig/service/TourApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourLiveDataService.java`
+- `src/main/java/com/eodegano/cocobackend/config/CacheConfig.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourLiveDataServiceTest.java`
+
+## [0.5.7] - 2026-08-16
+
+### Fixed
+
+#### `SecurityConfig` — 운영 배포에 맞춰 인가 규칙 정리 (`anyRequest().permitAll()` → `authenticated()`)
+
+테스트 편의를 위해 걸어뒀던 catch-all `anyRequest().permitAll()`을 운영 배포에 맞춰 `authenticated()`로 전환했다. 이 규칙에 걸리는 요청 자체가 없어야 정상이지만(모든 컨트롤러 엔드포인트는 이미 개별 규칙으로 커버됨), 앞으로 신규 엔드포인트가 추가될 때 SecurityConfig에 규칙을 깜빡해도 기본값이 "인증 필요"가 되도록 방어선을 세운 것.
+
+- `docs/FEATURES_BACK.md`·`CHANGELOG.md`(AU/US/PO/CO/SH 각 기능 블록)를 근거로 컨트롤러 5개(Auth/User/Poi/TourCourse/Test) 전체 엔드포인트를 대조 — `anyRequest()` 전환 전 이미 개별 규칙으로 인증 필요/불필요가 모두 정확히 커버되어 있었음(예: `PATCH /api/v1/tour-course/*`는 0.5.5에서 이미 보완됨). 신규로 인가 규칙이 빠져있던 엔드포인트는 없었음
+- **`OPTIONS /**` permitAll 추가**: `anyRequest().permitAll()`에 가려 드러나지 않았던 문제 — `authenticated()`로 바꾸면 브라우저가 보내는 CORS preflight(OPTIONS, Authorization 헤더 없음) 요청이 인증 필요 엔드포인트(PATCH/DELETE 등)에서 401로 막혀 프론트 쪽에서 CORS 에러로 보임. Security 필터 체인에서 OPTIONS 메서드는 전 경로 permitAll 처리
+- **`/test`(`TestController` 헬스체크) permitAll 추가**: 문서화되지 않았던 배포 확인용 진단 엔드포인트. 민감정보 없이 "서버 정상 동작" 문자열만 반환하므로 인증 없이 curl로 배포 확인 가능해야 함
+- **`/actuator/health` permitAll 추가**: `spring-boot-starter-actuator` 의존성은 있으나 `SecurityConfig`에 규칙이 없어 `anyRequest()` 전환 시 함께 막힐 뻔했음. 기본 노출 엔드포인트(UP/DOWN 상태만 반환, 민감정보 없음)라 표준 관례대로 공개
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/config/SecurityConfig.java`
+- `CHANGELOG.md`
+
 ## [0.5.6] - 2026-08-15
 
 ### Fixed

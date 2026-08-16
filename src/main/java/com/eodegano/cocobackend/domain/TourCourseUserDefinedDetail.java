@@ -50,6 +50,9 @@ public class TourCourseUserDefinedDetail {
     @Column(name = "content_id", nullable = false)
     private Long contentId;
 
+    @Column(name = "cost")
+    private Integer cost;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

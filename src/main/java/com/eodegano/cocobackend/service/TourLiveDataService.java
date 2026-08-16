@@ -2,15 +2,19 @@ package com.eodegano.cocobackend.service;
 
 import com.eodegano.cocobackend.config.CacheConfig;
 import com.eodegano.cocobackend.dataMig.service.TourApiClient;
+import com.eodegano.cocobackend.domain.enums.PlaceType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -22,24 +26,42 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TourLiveDataService {
 
-    private static final int CANDIDATE_TARGET_COUNT = 2000;
+    /** 타입별 후보 캡 — 7타입 합산 실제 사용량은 대부분 이보다 훨씬 작음(소형 타입은 totalCount에서 조기 종료) */
+    private static final int PER_TYPE_CANDIDATE_CAP = 3000;
 
     private final TourApiClient api;
 
-    /** 경북 전체 POI 후보 리스트 (전 타입, areaBasedList2 기반) */
-    @Cacheable(cacheNames = CacheConfig.POI_CANDIDATES_CACHE, key = "'all'")
+    /**
+     * 경북 전체 POI 후보 리스트 (전 타입, areaBasedList2 기반).
+     * 타입(contentTypeId)별로 나눠 수집 — 물량이 큰 타입(숙박·음식점 등)이 소형 타입(행사·레포츠 등)을
+     * 후보 풀에서 밀어내는 것을 방지한다. sync=true로 캐시 미스 시 동시 요청이 중복으로
+     * TourAPI를 호출하지 않도록 막는다.
+     */
+    @Cacheable(cacheNames = CacheConfig.POI_CANDIDATES_CACHE, key = "'all'", sync = true)
     public List<PoiSummary> getAllCandidates() {
-        List<JsonNode> items = api.areaBasedListAll(null, CANDIDATE_TARGET_COUNT);
+        List<Integer> typeIds = Arrays.stream(PlaceType.values())
+                .map(PlaceType::getContentTypeId)
+                .toList();
+
+        Map<Integer, List<JsonNode>> byType = api.areaBasedListAllByTypes(typeIds, PER_TYPE_CANDIDATE_CAP);
+
         List<PoiSummary> result = new ArrayList<>();
-        for (JsonNode n : items) {
-            try {
-                result.add(mapSummary(n));
-            } catch (Exception e) {
-                log.warn("POI 후보 매핑 실패: contentid={}, err={}", api.text(n, "contentid"), e.getMessage());
+        for (List<JsonNode> items : byType.values()) {
+            for (JsonNode n : items) {
+                try {
+                    result.add(mapSummary(n));
+                } catch (Exception e) {
+                    log.warn("POI 후보 매핑 실패: contentid={}, err={}", api.text(n, "contentid"), e.getMessage());
+                }
             }
         }
         log.info("TourAPI 라이브 조회 완료: {}건", result.size());
         return result;
+    }
+
+    /** 캐시 워밍(정기 갱신)용 — TTL 만료 전에 evict 후 {@link #getAllCandidates()}를 다시 불러 캐시를 채운다 */
+    @CacheEvict(cacheNames = CacheConfig.POI_CANDIDATES_CACHE, key = "'all'")
+    public void evictCandidatesCache() {
     }
 
     /** POI 개별 상세 (detailIntro2 기반, 타입별 운영시간/비용 원천 필드 매핑) */

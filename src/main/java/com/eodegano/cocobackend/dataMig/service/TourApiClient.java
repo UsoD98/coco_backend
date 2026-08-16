@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import tools.jackson.databind.JsonNode;
@@ -11,7 +12,13 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
 /**
  * 한국관광공사 TourAPI v2 호출 클라이언트
@@ -29,11 +36,20 @@ public class TourApiClient {
     private static final String BASE_URL = "https://apis.data.go.kr/B551011/KorService2";
     private static final String GYEONGBUK_AREA_CODE = "35";
 
+    /** 페이지당 요청 건수 — 클수록 동일 범위를 더 적은 호출로 커버 (일일 호출 한도 1000건 절약) */
+    private static final int PAGE_SIZE = 300;
+    /** 동시 진행 요청 수 상한 — TourAPI에 문서화된 동시 호출 제한이 없어 보수적으로 제한 */
+    private static final int MAX_CONCURRENT_REQUESTS = 4;
+    private static final int MAX_API_RETRIES = 3;
+    private static final long RETRY_BASE_DELAY_MS = 500;
+
     @Value("${tourapi.service-key}")
     private String serviceKey;
 
     private final RestClient restClient = RestClient.create();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Semaphore requestThrottle = new Semaphore(MAX_CONCURRENT_REQUESTS);
+    private final ExecutorService pageFetchExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
      * areaBasedList2 - 지역 기반 관광지 목록 조회
@@ -108,34 +124,67 @@ public class TourApiClient {
 
     /**
      * areaBasedList2 전체 페이지 수집 (최대 targetCount건)
+     * 1페이지로 totalCount를 먼저 확인한 뒤, 남은 페이지는 병렬로 수집한다
+     * (동시성은 {@link #requestThrottle}로 상한 적용, 호출 총량은 페이지 수와 동일해 변하지 않음).
      */
     public List<JsonNode> areaBasedListAll(Integer contentTypeId, int targetCount) {
-        List<JsonNode> results = new ArrayList<>();
-        int pageNo = 1;
-        int numOfRows = Math.min(targetCount, 100);
+        int numOfRows = Math.min(targetCount, PAGE_SIZE);
 
-        while (results.size() < targetCount) {
-            JsonNode response = areaBasedList(contentTypeId, pageNo, numOfRows);
-            JsonNode items = extractItems(response);
+        JsonNode firstResponse = areaBasedList(contentTypeId, 1, numOfRows);
+        List<JsonNode> results = new ArrayList<>(toList(extractItems(firstResponse)));
 
-            if (items == null || !items.isArray() || items.isEmpty()) {
-                log.info("더 이상 데이터 없음 (contentTypeId={}, page={})", contentTypeId, pageNo);
-                break;
-            }
-
-            for (JsonNode item : items) {
-                results.add(item);
-                if (results.size() >= targetCount) break;
-            }
-
-            int totalCount = getTotalCount(response);
-            if (results.size() >= totalCount) break;
-
-            pageNo++;
+        if (results.isEmpty()) {
+            log.info("데이터 없음 (contentTypeId={})", contentTypeId);
+            return results;
         }
 
-        log.info("areaBasedList 수집 완료: contentTypeId={}, {}건", contentTypeId, results.size());
+        int totalCount = getTotalCount(firstResponse);
+        int available = Math.min(totalCount, targetCount);
+        int totalPages = (int) Math.ceil((double) available / numOfRows);
+
+        if (totalPages > 1) {
+            List<CompletableFuture<List<JsonNode>>> futures = new ArrayList<>();
+            for (int pageNo = 2; pageNo <= totalPages; pageNo++) {
+                int p = pageNo;
+                futures.add(CompletableFuture.supplyAsync(
+                        () -> toList(extractItems(areaBasedList(contentTypeId, p, numOfRows))),
+                        pageFetchExecutor));
+            }
+            for (CompletableFuture<List<JsonNode>> future : futures) {
+                results.addAll(future.join());
+            }
+        }
+
+        if (results.size() > targetCount) {
+            results = results.subList(0, targetCount);
+        }
+
+        log.info("areaBasedList 수집 완료: contentTypeId={}, {}건 ({}페이지)", contentTypeId, results.size(), totalPages);
         return results;
+    }
+
+    /**
+     * 콘텐츠타입별로 {@link #areaBasedListAll}을 동시에 실행해 합친다.
+     * 타입 간에도 병렬로 진행하지만(가상 스레드라 중첩 join이 데드락을 유발하지 않음),
+     * 실제 동시 HTTP 요청 수는 {@link #requestThrottle}로 여전히 {@link #MAX_CONCURRENT_REQUESTS}건으로 제한된다.
+     */
+    public Map<Integer, List<JsonNode>> areaBasedListAllByTypes(List<Integer> contentTypeIds, int perTypeTargetCount) {
+        Map<Integer, CompletableFuture<List<JsonNode>>> futures = new LinkedHashMap<>();
+        for (Integer typeId : contentTypeIds) {
+            futures.put(typeId, CompletableFuture.supplyAsync(
+                    () -> areaBasedListAll(typeId, perTypeTargetCount), pageFetchExecutor));
+        }
+
+        Map<Integer, List<JsonNode>> result = new LinkedHashMap<>();
+        futures.forEach((typeId, future) -> result.put(typeId, future.join()));
+        return result;
+    }
+
+    private List<JsonNode> toList(JsonNode items) {
+        if (items == null || !items.isArray()) return List.of();
+        List<JsonNode> list = new ArrayList<>();
+        items.forEach(list::add);
+        return list;
     }
 
     /** 응답에서 item 배열 추출 */
@@ -164,22 +213,59 @@ public class TourApiClient {
     }
 
     private JsonNode callApi(URI uri) {
-        try {
-            String body = restClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .body(String.class);
-
-            if (body == null || body.isBlank()) {
-                log.error("API 응답 비어있음: uri={}", uri);
+        for (int attempt = 1; attempt <= MAX_API_RETRIES; attempt++) {
+            try {
+                requestThrottle.acquire();
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 return objectMapper.createObjectNode();
             }
 
-            return objectMapper.readTree(body);
+            try {
+                String body = restClient.get()
+                        .uri(uri)
+                        .retrieve()
+                        .body(String.class);
 
-        } catch (Exception e) {
-            log.error("API 호출 오류: uri={}, error={}", uri, e.getMessage());
-            return objectMapper.createObjectNode();
+                if (body == null || body.isBlank()) {
+                    log.error("API 응답 비어있음: uri={}", uri);
+                    return objectMapper.createObjectNode();
+                }
+
+                return objectMapper.readTree(body);
+
+            } catch (RestClientResponseException e) {
+                int status = e.getStatusCode().value();
+                boolean retryable = status == 429 || status >= 500;
+                if (retryable && attempt < MAX_API_RETRIES) {
+                    log.warn("API 호출 재시도 (attempt {}/{}): uri={}, status={}", attempt, MAX_API_RETRIES, uri, status);
+                    sleepQuietly(RETRY_BASE_DELAY_MS * attempt);
+                    continue;
+                }
+                log.error("API 호출 오류: uri={}, status={}, error={}", uri, status, e.getMessage());
+                return objectMapper.createObjectNode();
+
+            } catch (Exception e) {
+                if (attempt < MAX_API_RETRIES) {
+                    log.warn("API 호출 재시도 (attempt {}/{}): uri={}, error={}", attempt, MAX_API_RETRIES, uri, e.getMessage());
+                    sleepQuietly(RETRY_BASE_DELAY_MS * attempt);
+                    continue;
+                }
+                log.error("API 호출 오류: uri={}, error={}", uri, e.getMessage());
+                return objectMapper.createObjectNode();
+
+            } finally {
+                requestThrottle.release();
+            }
+        }
+        return objectMapper.createObjectNode();
+    }
+
+    private void sleepQuietly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 
