@@ -24,7 +24,7 @@ import java.util.List;
 public class GroqApiClient {
 
     private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-    private static final String MODEL = "llama-3.1-8b-instant";
+    private static final String MODEL = "openai/gpt-oss-20b";
     private static final int MAX_RETRIES = 3;
     private static final long RETRY_DELAY_MS = 1000;
     private static final long RATE_LIMIT_DELAY_MS = 20_000;

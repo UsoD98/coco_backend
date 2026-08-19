@@ -31,7 +31,7 @@
 
 **Client**
 - `GroqApiClient` - Groq API 호출 클라이언트
-    - llama-3.1-8b-instant 모델 사용
+    - openai/gpt-oss-20b 모델 사용 (2026-08-16 llama-3.1-8b-instant 단종에 따른 Groq 권장 대체 모델로 전환)
     - 재시도 로직 (최대 3회, 1초 대기)
     - ClassPathResource를 통한 프롬프트 템플릿 로드
     - RestClient를 사용한 HTTP 통신
