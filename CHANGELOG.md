@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-08-19
+
+### Fixed
+
+#### Groq API `llama-3.1-8b-instant` 모델 단종에 따른 여행 코스 생성 기능 장애 수정
+
+Groq가 2026-08-16부로 `llama-3.1-8b-instant` 모델을 단종하며 이후 해당 모델로의 요청은 더 이상 서빙되지 않는다고 공지. 여행 코스 생성(`GroqApiClient`)이 이 모델명을 하드코딩해서 쓰고 있어 코스 생성 요청이 모두 실패하는 상태였음.
+
+- Groq 공식 권장 대체 모델인 `openai/gpt-oss-20b`로 전환 (`GroqApiClient.MODEL`)
+- 요청/응답 DTO, 재시도·JSON 파싱 로직은 모델 독립적이라 변경 없음
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `docs/func/FEAT_TOURCOURSE_GEN.md`
+
 ## [0.5.11] - 2026-08-16
 
 ### Fixed
