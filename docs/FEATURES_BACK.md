@@ -203,7 +203,7 @@
 
 ### PO5. POI 좋아요 토글
 - **설명**: 로그인 사용자가 특정 POI에 좋아요를 추가하거나 취소. `user_poi_like` 중계 테이블로 중복 방지. `poi_rating.likes`(v0.5.0부터 `tour.likes`에서 이전)를 원자적 JPQL UPDATE로 증감.
-- **상태 (v0.5.0 변경)**: 미인증 → 401 / 좋아요 추가 → `{liked: true, likes: N}` / 취소 → `{liked: false, likes: N}` / 성공 → 200. **"존재하지 않는 POI → 404" 검증 제거**: `Tour` 로컬 테이블이 없어져 존재 여부를 확인할 근거가 없음. `poi_rating` 행이 없으면 좋아요 액션 시 on-demand 생성(`likes=1`, `stars=null`)하고, TourAPI 라이브 재검증은 하지 않음(프론트가 이미 API로 확인된 contentId만 전달한다고 신뢰).
+- **상태 (v0.5.0 변경)**: 미인증 → 401 / 좋아요 추가 → `{liked: true, totalLiked: N}` / 취소 → `{liked: false, totalLiked: N}` / 성공 → 200. **"존재하지 않는 POI → 404" 검증 제거**: `Tour` 로컬 테이블이 없어져 존재 여부를 확인할 근거가 없음. `poi_rating` 행이 없으면 좋아요 액션 시 on-demand 생성(`likes=1`, `stars=null`)하고, TourAPI 라이브 재검증은 하지 않음(프론트가 이미 API로 확인된 contentId만 전달한다고 신뢰). **v0.6.5**: 응답 필드명을 `likes`→`totalLiked`로 변경해 PO2/PO3(GBC017/GBC018, v0.6.4)의 `totalLiked`와 통일 — 프론트가 좋아요 토글 응답으로 목록/상세 화면의 로컬 상태를 직접 patch할 때 필드명이 같아야 매핑이 단순해짐.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`POST /api/v1/poi/{contentId}/like`, 인증 필수) — `TourRepository` 의존 제거하고 `PoiRatingRepository` 기반으로 재구현 필요
 - **FE 의존**: S2 플래너 POI 카드 좋아요 버튼.

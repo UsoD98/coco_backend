@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-08-22
+
+### Fixed
+
+#### POI 좋아요 토글 응답 필드명 통일 (likes → totalLiked)
+
+`POST /api/v1/poi/{contentId}/like`(PO5) 응답의 좋아요 총개수 필드명이 v0.6.4에서 추가한
+`GET /api/v1/poi`·`GET /api/v1/poi/{contentId}`의 `totalLiked`와 달라(`likes`) 프론트가
+두 응답을 같은 로컬 상태로 합칠 때 매핑이 번거로웠던 문제 수정.
+
+- `PoiLikeResponseDto.likes` → `totalLiked`로 필드명 변경 (`{liked, totalLiked}`)
+- 프론트는 좋아요 토글 후 GET 재조회 없이 이 응답으로 목록/상세의 `liked`·`totalLiked`를
+  바로 patch하면 됨 (필드명이 같아져 별도 매핑 불필요)
+
+### Files Changed (5 files)
+
+- `src/main/java/com/eodegano/cocobackend/dto/PoiLikeResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiLikeServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiLikeServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/controller/PoiControllerTest.java`
+- `docs/FEATURES_BACK.md`
+
 ## [0.6.4] - 2026-08-22
 
 ### Added

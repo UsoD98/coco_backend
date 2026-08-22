@@ -37,13 +37,13 @@ public class PoiLikeServiceImpl implements PoiLikeService {
         Optional<UserPoiLike> existing = userPoiLikeRepository.findByUserIdAndContentId(user.getId(), contentId);
 
         boolean liked;
-        int likes;
+        int totalLiked;
         if (existing.isPresent()) {
             userPoiLikeRepository.delete(existing.get());
             userPoiLikeRepository.flush();
             poiRatingRepository.decrementLikes(contentId);
             liked = false;
-            likes = poiRatingRepository.findById(contentId).map(PoiRating::getLikesOrZero).orElse(0);
+            totalLiked = poiRatingRepository.findById(contentId).map(PoiRating::getLikesOrZero).orElse(0);
         } else {
             userPoiLikeRepository.saveAndFlush(UserPoiLike.of(user.getId(), contentId));
             if (poiRatingRepository.existsById(contentId)) {
@@ -52,9 +52,9 @@ public class PoiLikeServiceImpl implements PoiLikeService {
                 poiRatingRepository.save(PoiRating.createWithLike(contentId));
             }
             liked = true;
-            likes = poiRatingRepository.findById(contentId).map(PoiRating::getLikesOrZero).orElse(1);
+            totalLiked = poiRatingRepository.findById(contentId).map(PoiRating::getLikesOrZero).orElse(1);
         }
 
-        return new PoiLikeResponseDto(liked, likes);
+        return new PoiLikeResponseDto(liked, totalLiked);
     }
 }

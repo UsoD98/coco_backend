@@ -169,7 +169,7 @@ class PoiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.msg").value("좋아요가 추가되었습니다."))
                 .andExpect(jsonPath("$.data.liked").value(true))
-                .andExpect(jsonPath("$.data.likes").value(1));
+                .andExpect(jsonPath("$.data.totalLiked").value(1));
     }
 
     @Test
@@ -183,6 +183,6 @@ class PoiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.msg").value("좋아요가 취소되었습니다."))
                 .andExpect(jsonPath("$.data.liked").value(false))
-                .andExpect(jsonPath("$.data.likes").value(0));
+                .andExpect(jsonPath("$.data.totalLiked").value(0));
     }
 }
