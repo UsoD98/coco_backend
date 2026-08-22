@@ -7,5 +7,5 @@ import lombok.Getter;
 @AllArgsConstructor
 public class PoiLikeResponseDto {
     private boolean liked;
-    private int likes;
+    private int totalLiked;
 }

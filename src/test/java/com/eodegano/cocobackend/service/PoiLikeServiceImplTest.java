@@ -66,7 +66,7 @@ class PoiLikeServiceImplTest {
         PoiLikeResponseDto result = poiLikeService.toggleLike(CONTENT_ID, EMAIL);
 
         assertThat(result.isLiked()).isTrue();
-        assertThat(result.getLikes()).isEqualTo(1);
+        assertThat(result.getTotalLiked()).isEqualTo(1);
         verify(userPoiLikeRepository).saveAndFlush(any(UserPoiLike.class));
         verify(poiRatingRepository).save(any(PoiRating.class));
         verify(poiRatingRepository, never()).incrementLikes(any());
@@ -84,7 +84,7 @@ class PoiLikeServiceImplTest {
         PoiLikeResponseDto result = poiLikeService.toggleLike(CONTENT_ID, EMAIL);
 
         assertThat(result.isLiked()).isTrue();
-        assertThat(result.getLikes()).isEqualTo(5);
+        assertThat(result.getTotalLiked()).isEqualTo(5);
         verify(poiRatingRepository).incrementLikes(CONTENT_ID);
         verify(poiRatingRepository, never()).save(any());
     }
@@ -101,7 +101,7 @@ class PoiLikeServiceImplTest {
         PoiLikeResponseDto result = poiLikeService.toggleLike(CONTENT_ID, EMAIL);
 
         assertThat(result.isLiked()).isFalse();
-        assertThat(result.getLikes()).isEqualTo(2);
+        assertThat(result.getTotalLiked()).isEqualTo(2);
         verify(userPoiLikeRepository).delete(existing);
         verify(userPoiLikeRepository).flush();
         verify(poiRatingRepository).decrementLikes(CONTENT_ID);
@@ -118,6 +118,6 @@ class PoiLikeServiceImplTest {
         PoiLikeResponseDto result = poiLikeService.toggleLike(CONTENT_ID, EMAIL);
 
         assertThat(result.isLiked()).isFalse();
-        assertThat(result.getLikes()).isEqualTo(0);
+        assertThat(result.getTotalLiked()).isEqualTo(0);
     }
 }

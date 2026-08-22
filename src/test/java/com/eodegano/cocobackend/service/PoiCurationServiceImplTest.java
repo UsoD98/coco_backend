@@ -1,7 +1,10 @@
 package com.eodegano.cocobackend.service;
 
+import com.eodegano.cocobackend.domain.User;
 import com.eodegano.cocobackend.dto.PoiCurationItemDto;
 import com.eodegano.cocobackend.dto.PoiCurationResponseDto;
+import com.eodegano.cocobackend.repository.UserPoiLikeRepository;
+import com.eodegano.cocobackend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,6 +29,12 @@ class PoiCurationServiceImplTest {
 
     @Mock
     private TourLiveDataService tourLiveDataService;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private UserPoiLikeRepository userPoiLikeRepository;
 
     private PoiSummary bulguksa;
     private PoiSummary gyeongjuFood;
@@ -44,7 +54,7 @@ class PoiCurationServiceImplTest {
     @Test
     @DisplayName("실패 - sigunguCode가 null이면 IllegalArgumentException")
     void getPoiListFailWithNullSigunguCode() {
-        assertThatThrownBy(() -> poiCurationService.getPoiList(null, 2, null))
+        assertThatThrownBy(() -> poiCurationService.getPoiList(null, 2, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("sigunguCode는 필수입니다");
     }
@@ -52,7 +62,7 @@ class PoiCurationServiceImplTest {
     @Test
     @DisplayName("실패 - sigunguCode가 빈 문자열이면 IllegalArgumentException")
     void getPoiListFailWithBlankSigunguCode() {
-        assertThatThrownBy(() -> poiCurationService.getPoiList("  ", 2, null))
+        assertThatThrownBy(() -> poiCurationService.getPoiList("  ", 2, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("sigunguCode는 필수입니다");
     }
@@ -60,7 +70,7 @@ class PoiCurationServiceImplTest {
     @Test
     @DisplayName("실패 - peopleCount가 null이면 IllegalArgumentException")
     void getPoiListFailWithNullPeopleCount() {
-        assertThatThrownBy(() -> poiCurationService.getPoiList("35130", null, null))
+        assertThatThrownBy(() -> poiCurationService.getPoiList("35130", null, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("peopleCount는 필수입니다");
     }
@@ -74,7 +84,7 @@ class PoiCurationServiceImplTest {
     void getPoiListSuccessWithAreaCodePrefixedSigunguCode() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
 
-        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null);
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, null);
 
         assertThat(result.isAvailable()).isTrue();
         assertThat(result.getItems()).hasSize(2);
@@ -85,7 +95,7 @@ class PoiCurationServiceImplTest {
     void getPoiListSuccessWithRawSigunguCode() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
 
-        PoiCurationResponseDto result = poiCurationService.getPoiList("130", 2, null);
+        PoiCurationResponseDto result = poiCurationService.getPoiList("130", 2, null, null);
 
         assertThat(result.isAvailable()).isTrue();
         assertThat(result.getItems()).hasSize(2);
@@ -96,7 +106,7 @@ class PoiCurationServiceImplTest {
     void getPoiListSuccessWithContentTypeFilter() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
 
-        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, 39);
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, 39, null);
 
         assertThat(result.getItems()).hasSize(1);
         PoiCurationItemDto item = result.getItems().get(0);
@@ -111,7 +121,7 @@ class PoiCurationServiceImplTest {
     void getPoiListSuccessWithNoMatch() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa));
 
-        PoiCurationResponseDto result = poiCurationService.getPoiList("35990", 2, null);
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35990", 2, null, null);
 
         assertThat(result.isAvailable()).isFalse();
         assertThat(result.getItems()).isEmpty();
@@ -122,8 +132,52 @@ class PoiCurationServiceImplTest {
     void getPoiListAvgPriceAlwaysNull() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(gyeongjuFood));
 
-        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, 39);
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, 39, null);
 
         assertThat(result.getItems()).allSatisfy(item -> assertThat(item.getAvgPrice()).isNull());
+    }
+
+    // ───────────────────────────────────────────────
+    // liked 필드 (좋아요 여부)
+    // ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("성공 - 비로그인(userEmail=null)이면 모든 아이템 liked=false")
+    void getPoiListLikedFalseWhenAnonymous() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
+
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, null);
+
+        assertThat(result.getItems()).allSatisfy(item -> assertThat(item.isLiked()).isFalse());
+    }
+
+    @Test
+    @DisplayName("성공 - 로그인 사용자가 좋아요한 contentId만 liked=true")
+    void getPoiListLikedTrueForLikedContentOnly() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
+        User user = User.builder().id(1L).email("test@test.com").nickname("tester").build();
+        given(userRepository.findByEmailAndDeletedAtIsNull("test@test.com")).willReturn(Optional.of(user));
+        given(userPoiLikeRepository.findContentIdsByUserIdAndContentIdIn(1L, List.of(126289L, 999999L)))
+                .willReturn(List.of(126289L));
+
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, "test@test.com");
+
+        assertThat(result.getItems())
+                .filteredOn(item -> item.getContentId().equals(126289L))
+                .allSatisfy(item -> assertThat(item.isLiked()).isTrue());
+        assertThat(result.getItems())
+                .filteredOn(item -> item.getContentId().equals(999999L))
+                .allSatisfy(item -> assertThat(item.isLiked()).isFalse());
+    }
+
+    @Test
+    @DisplayName("성공 - 유효 토큰이지만 탈퇴 등으로 사용자 미조회 시 liked=false 안전 처리")
+    void getPoiListLikedFalseWhenUserNotFound() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa));
+        given(userRepository.findByEmailAndDeletedAtIsNull("ghost@test.com")).willReturn(Optional.empty());
+
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, "ghost@test.com");
+
+        assertThat(result.getItems()).allSatisfy(item -> assertThat(item.isLiked()).isFalse());
     }
 }

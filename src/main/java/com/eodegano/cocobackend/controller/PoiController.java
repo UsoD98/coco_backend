@@ -32,14 +32,19 @@ public class PoiController {
     public ResponseEntity<ApiResponse<PoiCurationResponseDto>> getPoiList(
             @RequestParam(required = true) String sigunguCode,
             @RequestParam(required = true) Integer peopleCount,
-            @RequestParam(required = false) Integer contentTypeId) {
-        PoiCurationResponseDto result = poiCurationService.getPoiList(sigunguCode, peopleCount, contentTypeId);
+            @RequestParam(required = false) Integer contentTypeId,
+            Authentication authentication) {
+        String userEmail = (authentication != null) ? authentication.getName() : null;
+        PoiCurationResponseDto result = poiCurationService.getPoiList(sigunguCode, peopleCount, contentTypeId, userEmail);
         return ResponseEntity.ok(ApiResponse.ok("POI 목록을 조회했습니다.", result));
     }
 
     @GetMapping("/{contentId}")
-    public ResponseEntity<ApiResponse<PoiDetailResponseDto>> getPoiDetail(@PathVariable Long contentId) {
-        PoiDetailResponseDto result = poiDetailService.getPoiDetail(contentId);
+    public ResponseEntity<ApiResponse<PoiDetailResponseDto>> getPoiDetail(
+            @PathVariable Long contentId,
+            Authentication authentication) {
+        String userEmail = (authentication != null) ? authentication.getName() : null;
+        PoiDetailResponseDto result = poiDetailService.getPoiDetail(contentId, userEmail);
         return ResponseEntity.ok(ApiResponse.ok("POI 상세 정보를 조회했습니다.", result));
     }
 
