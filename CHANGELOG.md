@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-22
+
+### Fixed
+
+#### `openai/gpt-oss-20b` reasoning 모델 특성으로 인한 AI 응답 파싱 실패 수정
+
+v0.5.12에서 `openai/gpt-oss-20b`로 전환한 뒤 운영에서 간헐적으로 `Failed to parse AI response: No content to map due to end-of-input` 에러 발생. Groq API 호출 자체는 성공(`choices` 비어있지 않음)했는데 파싱 단계에서만 실패.
+
+- **원인**: 기존 `llama-3.1-8b-instant`와 달리 `openai/gpt-oss-20b`는 reasoning 모델이라, 최종 답변을 만들기 전에 내부 추론(CoT) 토큰을 먼저 소비함. `reasoning_effort`/`reasoning_format`을 지정하지 않아 기본값(medium)으로 동작했고, 후보 풀이 크거나 복잡한 요청에서는 추론이 `max_tokens`(4000) 예산을 다 소진해 최종 `content`가 빈 문자열(`""`)로 반환됨 — Jackson이 빈 문자열을 파싱하려다 `MismatchedInputException`을 던짐.
+- `GroqApiRequestDto`에 `reasoning_effort: "low"` 추가: 코스 생성은 후보 목록에서 정해진 JSON 스키마로 배치하는 단순 작업이라 깊은 추론이 불필요 — 추론 토큰 소모를 최소화해 `max_tokens` 예산을 답변 생성에 더 쓸 수 있도록 함
+- `reasoning_format: "parsed"` 추가: reasoning을 `content`와 분리된 필드로 받아, reasoning 텍스트(`<think>` 등)가 `content`에 섞여 JSON 파싱을 깨뜨릴 가능성을 원천 차단
+- `GroqApiResponseDto`에 `Choice.finish_reason`, `Usage`(prompt_tokens/completion_tokens/total_tokens) 캡처 추가
+
+### Added
+
+#### Groq API 호출 진단 로깅
+
+- 호출 성공 시마다 `finishReason`·`promptTokens`·`completionTokens`·`totalTokens`를 INFO 로그로 기록 (`GroqApiClient.logUsage`)
+- `finish_reason=length`(응답이 `max_tokens`에 걸려 잘림)인 경우 별도 WARN 로그로 강조
+- AI 응답 파싱 실패 시 에러 메시지만 남기던 것을, `finishReason`·`content` 길이도 함께 남기도록 개선 — 향후 동일 장애 발생 시 원인(토큰 부족 vs 그 외)을 로그만으로 즉시 판별 가능
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/dto/GroqApiRequestDto.java`
+- `src/main/java/com/eodegano/cocobackend/dto/GroqApiResponseDto.java`
+- `docs/func/FEAT_TOURCOURSE_GEN.md`
+
 ## [0.5.12] - 2026-08-19
 
 ### Fixed

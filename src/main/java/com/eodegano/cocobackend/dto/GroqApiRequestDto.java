@@ -17,6 +17,8 @@ public class GroqApiRequestDto {
     private List<Message> messages;
     private Double temperature;
     private Integer max_tokens;
+    private String reasoning_effort;
+    private String reasoning_format;
 
     @Getter
     @NoArgsConstructor

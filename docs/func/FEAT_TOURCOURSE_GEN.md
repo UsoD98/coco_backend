@@ -36,6 +36,7 @@
     - ClassPathResource를 통한 프롬프트 템플릿 로드
     - RestClient를 사용한 HTTP 통신
     - JSON 응답 파싱 및 검증
+    - **(v0.6.0)** `reasoning_effort: "low"` · `reasoning_format: "parsed"` 요청 파라미터 추가 — gpt-oss-20b가 reasoning 모델이라 추론(CoT) 토큰이 `max_tokens`를 소진해 `content`가 빈 문자열로 반환되며 파싱 실패하던 문제 수정. 응답 `finish_reason`·`usage`(prompt/completion/total tokens)를 캡처해 매 호출 로그로 남기고(`finish_reason=length` 시 경고), 파싱 실패 시에도 함께 기록
 
 **Service**
 - `TourCourseService` - 인터페이스

@@ -122,6 +122,7 @@ com.eodegano.cocobackend/
 - AI 응답 contentId 검증은 요청 내에서 이미 확보한 후보 리스트(캐시)와 메모리 대조 방식으로 수행 — 추가 DB/API 호출 없음.
 - **v0.2.6 샘플링 개선**: Hard exclusion(stars ≤ 1) → Tier A(stars ≥ 4, 70%) / Tier B(stars 2-3·null, 30%) 확률적 Tier 샘플링. likes 있으면 Tier 내 DESC 정렬, 없으면 shuffle. Cold-start(null) → Tier B 편입.
 - **v0.3.1 Rate Limit 개선**: Groq API 429 응답 시 `retry-after` 헤더 기반 대기(기본 20초)로 재시도. 기타 에러와 명시적으로 분리.
+- **v0.6.0 reasoning 모델 대응**: v0.5.12에서 전환한 `openai/gpt-oss-20b`가 reasoning 모델이라, 추론(CoT) 토큰이 `max_tokens` 예산을 다 소진하면 최종 답변(`content`)이 빈 문자열로 반환되어 JSON 파싱이 실패하는 문제 발생. `reasoning_effort: "low"`(코스 생성은 정해진 스키마에 후보를 배치하는 단순 작업이라 깊은 추론 불필요)·`reasoning_format: "parsed"`(reasoning을 content와 분리, `<think>` 텍스트로 인한 파싱 오염 방지)를 요청에 추가. 응답의 `finish_reason`·`usage`(prompt/completion/total tokens)를 캡처해 매 호출 성공 시 로그로 남기고, `finish_reason=length`(잘림) 시 별도 경고 로그 + 파싱 실패 시에도 해당 정보를 에러 로그에 포함해 향후 원인 진단이 가능하도록 개선.
 - **v0.4.0 장소별 상세 필드 추가**: 응답 `PlaceInfo`에 `durationMinutes`(AI 추정·DB 저장)·`thumbnailImg`·`operatingHours`·`cost` 4개 필드 추가. CO4·SH2도 동일 필드 반환.
 - AI 응답 검증(날짜 범위, contentId 실존, PlaceType 유효성) 후 `TourCourseUserDefined` + `TourCourseUserDefinedDetail` 저장.
 - 비로그인(userId=null) 허용으로 생성 후 저장까지 동작.
