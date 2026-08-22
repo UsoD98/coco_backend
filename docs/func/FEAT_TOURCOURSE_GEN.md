@@ -43,7 +43,7 @@
 - `TourCourseServiceImpl` - 구현체
     - `fetchPlacesData()`: DB에서 장소 데이터 조회 및 JSON 변환
     - `buildUserRequest()`: 사용자 요청 문자열 생성
-    - `validateAiResponse()`: AI 응답 검증 (contentId, 날짜, 타입)
+    - `validateAiResponse()`: AI 응답 검증 (contentId, 날짜, 타입) — **(v0.6.1)** 검증 실패 시 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)` 발생
     - `saveTourCourse()`: DB 저장 (TourCourseUserDefined, TourCourseUserDefinedDetail)
     - 타입별 Repository에서 상세 데이터 조회 (N+1 방지)
 
@@ -57,10 +57,10 @@
 - `GlobalExceptionHandler` - 전역 예외 처리
     - MethodArgumentNotValidException: 400 (Validation 실패)
     - IllegalArgumentException: 400 (비즈니스 로직 에러)
-    - RuntimeException: 500 (Groq API 실패 등)
+    - **(v0.6.1)** `AiCourseGenerationException`: **499** — Groq 호출 실패(rate limit·API 에러·빈 응답)·AI 응답 파싱 실패·AI 응답 검증 실패를 통일해서 처리. 응답 `data`에 `errorCode`/`retryable`/`finishReason` 포함
+    - RuntimeException: 500 (그 외 서버 에러 — DB 저장 실패 등)
     - Exception: 500 (기타 예외)
-- `ErrorResponse` - 구조화된 에러 응답 DTO
-    - 필드: timestamp, status, error, message, details
+- 에러 응답은 `ApiResponse<T>`(`code`/`msg`/`data`) 형태로 통일. AI 에러의 `data`는 `AiErrorDetail`(errorCode/retryable/finishReason)
 
 **Repository**
 - `TourCourseUserDefinedDetailRepository` - 신규 생성

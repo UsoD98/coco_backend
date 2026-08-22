@@ -12,6 +12,8 @@ import com.eodegano.cocobackend.dto.TourCourseGenerateResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseListItemDto;
 import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseUpdateRequestDto;
+import com.eodegano.cocobackend.exception.AiCourseGenerationException;
+import com.eodegano.cocobackend.exception.AiCourseGenerationException.ErrorCode;
 import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedDetailRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedRepository;
@@ -588,7 +590,8 @@ public class TourCourseServiceImpl implements TourCourseService {
 
     private void validateAiResponse(TourCourseAiResponseDto aiResponse, LocalDate startDate, LocalDate endDate) {
         if (aiResponse == null || aiResponse.getSchedule() == null || aiResponse.getSchedule().isEmpty()) {
-            throw new IllegalArgumentException("AI 응답이 비어있습니다");
+            throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                    "AI 응답이 비어있습니다", true);
         }
 
         Set<Long> contentIds = new HashSet<>();
@@ -598,13 +601,15 @@ public class TourCourseServiceImpl implements TourCourseService {
                     contentIds.add(place.getContentId());
 
                     if (day.getDate().isBefore(startDate) || day.getDate().isAfter(endDate)) {
-                        throw new IllegalArgumentException("일정 날짜가 요청 범위를 벗어났습니다: " + day.getDate());
+                        throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                                "AI가 생성한 일정 날짜가 요청 범위를 벗어났습니다: " + day.getDate(), true);
                     }
 
                     try {
                         PlaceType.valueOf(place.getType());
                     } catch (IllegalArgumentException e) {
-                        throw new IllegalArgumentException("유효하지 않은 장소 타입입니다: " + place.getType());
+                        throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                                "AI가 유효하지 않은 장소 타입을 생성했습니다: " + place.getType(), true);
                     }
                 }
             }
@@ -619,7 +624,8 @@ public class TourCourseServiceImpl implements TourCourseService {
             Set<Long> unknown = new HashSet<>(contentIds);
             unknown.removeAll(knownContentIds);
             log.error("존재하지 않는 장소 ID가 포함되어 있습니다: {}", unknown);
-            throw new IllegalArgumentException("존재하지 않는 장소 ID가 포함되어 있습니다");
+            throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                    "AI가 존재하지 않는 장소 ID를 생성했습니다", true);
         }
 
         log.info("AI response validation successful");

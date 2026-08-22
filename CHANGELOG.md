@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-22
+
+### Added
+
+#### AI 코스 생성 전용 에러 응답 (HTTP 499)
+
+AI(Groq) 코스 생성 플로우에서 발생하는 에러를 일반 400/500과 구분해, 프론트가 "AI 생성 실패" 케이스를 별도로 처리할 수 있도록 전용 에러 체계 도입.
+
+- `AiCourseGenerationException` 신규 추가: `errorCode`(RATE_LIMITED/API_CALL_FAILED/EMPTY_RESPONSE/RESPONSE_PARSE_FAILED/RESPONSE_VALIDATION_FAILED), `retryable`(재시도로 성공 가능성 있는지), `finishReason`(Groq 진단 정보, 있는 경우) 보유
+- `GlobalExceptionHandler`에 전용 핸들러 추가 — 표준 코드가 아닌 **499**로 응답, `ApiResponse.data`에 `AiErrorDetail`(errorCode/retryable/finishReason) 포함
+- `GroqApiClient`: rate limit 소진·API 호출 실패·빈 응답·JSON 파싱 실패를 모두 이 예외로 통일 (파싱 실패 시 v0.6.0에서 추가한 `finishReason`을 그대로 프론트까지 전달)
+- `TourCourseServiceImpl.validateAiResponse()`: AI가 생성한 일정의 날짜 범위·타입·contentId 검증 실패도 동일하게 처리
+- TourAPI 지역 데이터 없음(400)·DB 저장 실패(500) 등 AI 자체와 무관한 에러는 기존 그대로 유지
+
+### Files Changed (5 files, 2 files added)
+
+- `src/main/java/com/eodegano/cocobackend/exception/AiCourseGenerationException.java` (신규)
+- `src/main/java/com/eodegano/cocobackend/dto/AiErrorDetail.java` (신규)
+- `src/main/java/com/eodegano/cocobackend/exception/GlobalExceptionHandler.java`
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+
 ## [0.6.0] - 2026-08-22
 
 ### Fixed

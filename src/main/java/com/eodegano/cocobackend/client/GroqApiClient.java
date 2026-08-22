@@ -3,6 +3,8 @@ package com.eodegano.cocobackend.client;
 import com.eodegano.cocobackend.dto.GroqApiRequestDto;
 import com.eodegano.cocobackend.dto.GroqApiResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseAiResponseDto;
+import com.eodegano.cocobackend.exception.AiCourseGenerationException;
+import com.eodegano.cocobackend.exception.AiCourseGenerationException.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
@@ -107,7 +109,8 @@ public class GroqApiClient {
                         .body(GroqApiResponseDto.class);
 
                 if (response == null || response.getChoices() == null || response.getChoices().isEmpty()) {
-                    throw new RuntimeException("Empty response from Groq API");
+                    throw new AiCourseGenerationException(ErrorCode.EMPTY_RESPONSE,
+                            "Groq API가 빈 응답을 반환했습니다", true);
                 }
 
                 logUsage(response);
@@ -118,27 +121,38 @@ public class GroqApiClient {
                     long waitMs = parseRetryAfterMs(e);
                     log.warn("Groq API rate limit hit (attempt {}/{}). Waiting {}ms before retry.", attempt, MAX_RETRIES, waitMs);
                     if (attempt == MAX_RETRIES) {
-                        throw new RuntimeException("Groq API rate limit 초과로 요청에 실패했습니다. 잠시 후 다시 시도해주세요.", e);
+                        throw new AiCourseGenerationException(ErrorCode.RATE_LIMITED,
+                                "Groq API rate limit 초과로 요청에 실패했습니다. 잠시 후 다시 시도해주세요.", true, e);
                     }
                     sleepQuietly(waitMs);
                 } else {
                     log.error("Groq API call failed (attempt {}/{}): HTTP {} - {}", attempt, MAX_RETRIES, e.getStatusCode().value(), e.getMessage());
                     if (attempt == MAX_RETRIES) {
-                        throw new RuntimeException("Groq API 호출에 실패했습니다 (최대 재시도 횟수 초과)", e);
+                        throw new AiCourseGenerationException(ErrorCode.API_CALL_FAILED,
+                                "Groq API 호출에 실패했습니다 (HTTP " + e.getStatusCode().value() + ", 최대 재시도 횟수 초과)", false, e);
                     }
                     sleepQuietly(RETRY_DELAY_MS);
                 }
 
+            } catch (AiCourseGenerationException e) {
+                // 위 EMPTY_RESPONSE 케이스 - 그대로 재시도 대상으로 취급
+                log.error("Groq API call failed (attempt {}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
+                if (attempt == MAX_RETRIES) {
+                    throw e;
+                }
+                sleepQuietly(RETRY_DELAY_MS);
+
             } catch (Exception e) {
                 log.error("Groq API call failed (attempt {}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
                 if (attempt == MAX_RETRIES) {
-                    throw new RuntimeException("Groq API 호출에 실패했습니다 (최대 재시도 횟수 초과)", e);
+                    throw new AiCourseGenerationException(ErrorCode.API_CALL_FAILED,
+                            "Groq API 호출에 실패했습니다 (최대 재시도 횟수 초과)", true, e);
                 }
                 sleepQuietly(RETRY_DELAY_MS);
             }
         }
 
-        throw new RuntimeException("Groq API 호출에 실패했습니다");
+        throw new AiCourseGenerationException(ErrorCode.API_CALL_FAILED, "Groq API 호출에 실패했습니다", true);
     }
 
     private long parseRetryAfterMs(HttpClientErrorException e) {
@@ -174,7 +188,7 @@ public class GroqApiClient {
             Thread.sleep(ms);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("재시도 대기 중 중단되었습니다", ie);
+            throw new AiCourseGenerationException(ErrorCode.API_CALL_FAILED, "재시도 대기 중 중단되었습니다", true, ie);
         }
     }
 
@@ -190,9 +204,11 @@ public class GroqApiClient {
 
             return objectMapper.readValue(jsonContent, TourCourseAiResponseDto.class);
         } catch (Exception e) {
+            String finishReason = choice.getFinish_reason();
             log.error("Failed to parse AI response (finishReason={}, contentLength={}): {}",
-                    choice.getFinish_reason(), content == null ? 0 : content.length(), e.getMessage());
-            throw new RuntimeException("AI 응답 파싱에 실패했습니다", e);
+                    finishReason, content == null ? 0 : content.length(), e.getMessage());
+            throw new AiCourseGenerationException(ErrorCode.RESPONSE_PARSE_FAILED,
+                    "AI 응답 파싱에 실패했습니다", true, finishReason, e);
         }
     }
 
