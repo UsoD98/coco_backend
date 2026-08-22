@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-22
+
+### Testing
+
+#### AI 코스 생성(v0.6.1 HTTP 499 처리) 단위/슬라이스 테스트 추가
+
+`generateTourCourse()`(AI 코스 생성 엔트리포인트)가 기존에 테스트 없이 남아 있던 것을 보완. `GroqApiClient`는 목(mock)으로 대체해 실제 Groq 호출 없이 요청/응답 형태와 에러 매핑만 검증.
+
+- `TourCourseServiceImplTest`: 성공 시 저장·응답 DTO 필드 검증, Groq 예외가 감싸지지 않고 그대로 전파되는지, AI가 검증 규칙(날짜 범위)을 위반한 응답을 생성했을 때 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)`이 발생하는지 3건 추가
+- `TourCourseControllerTest`: `AiCourseGenerationException` 발생 시 실제 HTTP **499** + `data.errorCode`/`retryable`/`finishReason` 바디까지 `GlobalExceptionHandler` 경유로 검증하는 슬라이스 테스트 1건 추가
+- AssertJ `catchThrowableOfType(callable, class)` 오버로드가 현재 버전(3.27.7)에서 deprecated라 `catchThrowableOfType(class, callable)`로 사용
+
+### Files Changed (2 files)
+
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/controller/TourCourseControllerTest.java`
+
+## [0.6.1] - 2026-08-22
+
+### Added
+
+#### AI 코스 생성 전용 에러 응답 (HTTP 499)
+
+AI(Groq) 코스 생성 플로우에서 발생하는 에러를 일반 400/500과 구분해, 프론트가 "AI 생성 실패" 케이스를 별도로 처리할 수 있도록 전용 에러 체계 도입.
+
+- `AiCourseGenerationException` 신규 추가: `errorCode`(RATE_LIMITED/API_CALL_FAILED/EMPTY_RESPONSE/RESPONSE_PARSE_FAILED/RESPONSE_VALIDATION_FAILED), `retryable`(재시도로 성공 가능성 있는지), `finishReason`(Groq 진단 정보, 있는 경우) 보유
+- `GlobalExceptionHandler`에 전용 핸들러 추가 — 표준 코드가 아닌 **499**로 응답, `ApiResponse.data`에 `AiErrorDetail`(errorCode/retryable/finishReason) 포함
+- `GroqApiClient`: rate limit 소진·API 호출 실패·빈 응답·JSON 파싱 실패를 모두 이 예외로 통일 (파싱 실패 시 v0.6.0에서 추가한 `finishReason`을 그대로 프론트까지 전달)
+- `TourCourseServiceImpl.validateAiResponse()`: AI가 생성한 일정의 날짜 범위·타입·contentId 검증 실패도 동일하게 처리
+- TourAPI 지역 데이터 없음(400)·DB 저장 실패(500) 등 AI 자체와 무관한 에러는 기존 그대로 유지
+
+### Files Changed (5 files, 2 files added)
+
+- `src/main/java/com/eodegano/cocobackend/exception/AiCourseGenerationException.java` (신규)
+- `src/main/java/com/eodegano/cocobackend/dto/AiErrorDetail.java` (신규)
+- `src/main/java/com/eodegano/cocobackend/exception/GlobalExceptionHandler.java`
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+
+## [0.6.0] - 2026-08-22
+
+### Fixed
+
+#### `openai/gpt-oss-20b` reasoning 모델 특성으로 인한 AI 응답 파싱 실패 수정
+
+v0.5.12에서 `openai/gpt-oss-20b`로 전환한 뒤 운영에서 간헐적으로 `Failed to parse AI response: No content to map due to end-of-input` 에러 발생. Groq API 호출 자체는 성공(`choices` 비어있지 않음)했는데 파싱 단계에서만 실패.
+
+- **원인**: 기존 `llama-3.1-8b-instant`와 달리 `openai/gpt-oss-20b`는 reasoning 모델이라, 최종 답변을 만들기 전에 내부 추론(CoT) 토큰을 먼저 소비함. `reasoning_effort`/`reasoning_format`을 지정하지 않아 기본값(medium)으로 동작했고, 후보 풀이 크거나 복잡한 요청에서는 추론이 `max_tokens`(4000) 예산을 다 소진해 최종 `content`가 빈 문자열(`""`)로 반환됨 — Jackson이 빈 문자열을 파싱하려다 `MismatchedInputException`을 던짐.
+- `GroqApiRequestDto`에 `reasoning_effort: "low"` 추가: 코스 생성은 후보 목록에서 정해진 JSON 스키마로 배치하는 단순 작업이라 깊은 추론이 불필요 — 추론 토큰 소모를 최소화해 `max_tokens` 예산을 답변 생성에 더 쓸 수 있도록 함
+- `reasoning_format: "parsed"` 추가: reasoning을 `content`와 분리된 필드로 받아, reasoning 텍스트(`<think>` 등)가 `content`에 섞여 JSON 파싱을 깨뜨릴 가능성을 원천 차단
+- `GroqApiResponseDto`에 `Choice.finish_reason`, `Usage`(prompt_tokens/completion_tokens/total_tokens) 캡처 추가
+
+### Added
+
+#### Groq API 호출 진단 로깅
+
+- 호출 성공 시마다 `finishReason`·`promptTokens`·`completionTokens`·`totalTokens`를 INFO 로그로 기록 (`GroqApiClient.logUsage`)
+- `finish_reason=length`(응답이 `max_tokens`에 걸려 잘림)인 경우 별도 WARN 로그로 강조
+- AI 응답 파싱 실패 시 에러 메시지만 남기던 것을, `finishReason`·`content` 길이도 함께 남기도록 개선 — 향후 동일 장애 발생 시 원인(토큰 부족 vs 그 외)을 로그만으로 즉시 판별 가능
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/dto/GroqApiRequestDto.java`
+- `src/main/java/com/eodegano/cocobackend/dto/GroqApiResponseDto.java`
+- `docs/func/FEAT_TOURCOURSE_GEN.md`
+
 ## [0.5.12] - 2026-08-19
 
 ### Fixed

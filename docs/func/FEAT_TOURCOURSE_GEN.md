@@ -36,13 +36,14 @@
     - ClassPathResource를 통한 프롬프트 템플릿 로드
     - RestClient를 사용한 HTTP 통신
     - JSON 응답 파싱 및 검증
+    - **(v0.6.0)** `reasoning_effort: "low"` · `reasoning_format: "parsed"` 요청 파라미터 추가 — gpt-oss-20b가 reasoning 모델이라 추론(CoT) 토큰이 `max_tokens`를 소진해 `content`가 빈 문자열로 반환되며 파싱 실패하던 문제 수정. 응답 `finish_reason`·`usage`(prompt/completion/total tokens)를 캡처해 매 호출 로그로 남기고(`finish_reason=length` 시 경고), 파싱 실패 시에도 함께 기록
 
 **Service**
 - `TourCourseService` - 인터페이스
 - `TourCourseServiceImpl` - 구현체
     - `fetchPlacesData()`: DB에서 장소 데이터 조회 및 JSON 변환
     - `buildUserRequest()`: 사용자 요청 문자열 생성
-    - `validateAiResponse()`: AI 응답 검증 (contentId, 날짜, 타입)
+    - `validateAiResponse()`: AI 응답 검증 (contentId, 날짜, 타입) — **(v0.6.1)** 검증 실패 시 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)` 발생
     - `saveTourCourse()`: DB 저장 (TourCourseUserDefined, TourCourseUserDefinedDetail)
     - 타입별 Repository에서 상세 데이터 조회 (N+1 방지)
 
@@ -56,10 +57,10 @@
 - `GlobalExceptionHandler` - 전역 예외 처리
     - MethodArgumentNotValidException: 400 (Validation 실패)
     - IllegalArgumentException: 400 (비즈니스 로직 에러)
-    - RuntimeException: 500 (Groq API 실패 등)
+    - **(v0.6.1)** `AiCourseGenerationException`: **499** — Groq 호출 실패(rate limit·API 에러·빈 응답)·AI 응답 파싱 실패·AI 응답 검증 실패를 통일해서 처리. 응답 `data`에 `errorCode`/`retryable`/`finishReason` 포함
+    - RuntimeException: 500 (그 외 서버 에러 — DB 저장 실패 등)
     - Exception: 500 (기타 예외)
-- `ErrorResponse` - 구조화된 에러 응답 DTO
-    - 필드: timestamp, status, error, message, details
+- 에러 응답은 `ApiResponse<T>`(`code`/`msg`/`data`) 형태로 통일. AI 에러의 `data`는 `AiErrorDetail`(errorCode/retryable/finishReason)
 
 **Repository**
 - `TourCourseUserDefinedDetailRepository` - 신규 생성

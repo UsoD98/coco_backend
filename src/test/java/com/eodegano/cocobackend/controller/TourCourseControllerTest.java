@@ -1,6 +1,7 @@
 package com.eodegano.cocobackend.controller;
 
 import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
+import com.eodegano.cocobackend.exception.AiCourseGenerationException;
 import com.eodegano.cocobackend.security.JwtProvider;
 import com.eodegano.cocobackend.service.TourCourseService;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -158,5 +160,34 @@ class TourCourseControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400"))
                 .andExpect(jsonPath("$.msg").value("일정 날짜가 코스 기간을 벗어났습니다: 2026-08-14"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/tour-course - AI 코스 생성 에러 → 499 + AiErrorDetail(errorCode/retryable/finishReason)")
+    void generateTourCourseFailWithAiError() throws Exception {
+        given(tourCourseService.generateTourCourse(any(), any()))
+                .willThrow(new AiCourseGenerationException(
+                        AiCourseGenerationException.ErrorCode.RESPONSE_PARSE_FAILED,
+                        "AI 응답 파싱에 실패했습니다", true, "length", null));
+
+        String requestBody = """
+                {
+                  "peopleCount": 2,
+                  "startDate": "2026-09-01",
+                  "endDate": "2026-09-02",
+                  "transport": "CAR",
+                  "theme": ["자연"]
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/tour-course")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().is(499))
+                .andExpect(jsonPath("$.code").value("499"))
+                .andExpect(jsonPath("$.msg").value("AI 응답 파싱에 실패했습니다"))
+                .andExpect(jsonPath("$.data.errorCode").value("RESPONSE_PARSE_FAILED"))
+                .andExpect(jsonPath("$.data.retryable").value(true))
+                .andExpect(jsonPath("$.data.finishReason").value("length"));
     }
 }

@@ -1,5 +1,6 @@
 package com.eodegano.cocobackend.exception;
 
+import com.eodegano.cocobackend.dto.AiErrorDetail;
 import com.eodegano.cocobackend.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -76,6 +77,23 @@ public class GlobalExceptionHandler {
         String msg = ex.getMessage() != null ? ex.getMessage() : "접근 권한이 없습니다.";
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.of(403, msg, null));
+    }
+
+    // AI(Groq) 코스 생성 플로우(호출·파싱·응답 검증) 전용 에러 — 프론트가 일반 400/500과
+    // 구분해서 "AI 생성 실패" UI를 별도로 처리할 수 있도록 표준 코드가 아닌 499로 응답한다.
+    @ExceptionHandler(AiCourseGenerationException.class)
+    public ResponseEntity<ApiResponse<AiErrorDetail>> handleAiCourseGenerationException(AiCourseGenerationException ex) {
+        log.error("AI course generation error [{}] retryable={}: {}",
+                ex.getErrorCode(), ex.isRetryable(), ex.getMessage(), ex);
+
+        AiErrorDetail detail = AiErrorDetail.builder()
+                .errorCode(ex.getErrorCode().name())
+                .retryable(ex.isRetryable())
+                .finishReason(ex.getFinishReason())
+                .build();
+
+        return ResponseEntity.status(499)
+                .body(ApiResponse.of(499, ex.getMessage(), detail));
     }
 
     @ExceptionHandler(RuntimeException.class)

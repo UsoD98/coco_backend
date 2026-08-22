@@ -4,8 +4,13 @@ import com.eodegano.cocobackend.client.GroqApiClient;
 import com.eodegano.cocobackend.domain.TourCourseUserDefined;
 import com.eodegano.cocobackend.domain.TourCourseUserDefinedDetail;
 import com.eodegano.cocobackend.domain.User;
+import com.eodegano.cocobackend.domain.enums.TransportType;
+import com.eodegano.cocobackend.dto.TourCourseAiResponseDto;
+import com.eodegano.cocobackend.dto.TourCourseGenerateRequestDto;
+import com.eodegano.cocobackend.dto.TourCourseGenerateResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseUpdateRequestDto;
+import com.eodegano.cocobackend.exception.AiCourseGenerationException;
 import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedDetailRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedRepository;
@@ -28,7 +33,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -88,6 +96,30 @@ class TourCourseServiceImplTest {
         TourCourseUpdateRequestDto.DailyScheduleUpdate day =
                 new TourCourseUpdateRequestDto.DailyScheduleUpdate(START_DATE, List.of(place));
         return new TourCourseUpdateRequestDto(List.of(day));
+    }
+
+    private TourCourseGenerateRequestDto validGenerateRequest() {
+        return TourCourseGenerateRequestDto.builder()
+                .peopleCount(2)
+                .startDate(START_DATE)
+                .endDate(END_DATE)
+                .transport(TransportType.CAR)
+                .theme(List.of("자연"))
+                .sigunguCodes(List.of("47130"))
+                .build();
+    }
+
+    private PoiSummary candidate() {
+        return new PoiSummary(100L, 12, "불국사", "http://img.jpg",
+                new BigDecimal("129.0"), new BigDecimal("35.0"), "47130");
+    }
+
+    private TourCourseAiResponseDto aiResponse(LocalDate placeDate) {
+        TourCourseAiResponseDto.PlaceVisit place =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+        TourCourseAiResponseDto.DailyPlan day =
+                new TourCourseAiResponseDto.DailyPlan(placeDate, List.of(place));
+        return new TourCourseAiResponseDto(List.of(day));
     }
 
     @Test
@@ -208,5 +240,68 @@ class TourCourseServiceImplTest {
         assertThatThrownBy(() -> tourCourseService.updateCourse(COURSE_ID, validRequest(), OWNER_EMAIL))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("존재하지 않는 장소 ID가 포함되어 있습니다");
+    }
+
+    @Test
+    @DisplayName("성공 - AI 응답을 저장하고 설계된 응답 스펙(courseId·schedule·PlaceInfo)대로 반환")
+    void generateTourCourseSuccess() {
+        PoiSummary candidate = candidate();
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(aiResponse(START_DATE));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        TourCourseGenerateResponseDto result =
+                tourCourseService.generateTourCourse(validGenerateRequest(), null);
+
+        verify(tourCourseUserDefinedRepository).save(any());
+        verify(tourCourseUserDefinedDetailRepository).saveAll(anyList());
+
+        assertThat(result.getCourseId()).isEqualTo(COURSE_ID);
+        assertThat(result.getSchedule()).hasSize(1);
+        assertThat(result.getSchedule().get(0).getDate()).isEqualTo(START_DATE);
+
+        TourCourseGenerateResponseDto.PlaceInfo place = result.getSchedule().get(0).getPlaces().get(0);
+        assertThat(place.getSeq()).isEqualTo(1);
+        assertThat(place.getTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(place.getType()).isEqualTo("ATTRACTION");
+        assertThat(place.getContentId()).isEqualTo(100L);
+        assertThat(place.getContentName()).isEqualTo("불국사");
+        assertThat(place.getDurationMinutes()).isEqualTo(120);
+        assertThat(place.getThumbnailImg()).isEqualTo("http://img.jpg");
+        assertThat(place.getOperatingHours()).isEqualTo("상시 개방");
+        assertThat(place.getCost()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("실패 - Groq 호출 실패 시 AiCourseGenerationException이 감싸지지 않고 그대로 전파됨")
+    void generateTourCourseFailWhenGroqThrows() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        AiCourseGenerationException groqError = new AiCourseGenerationException(
+                AiCourseGenerationException.ErrorCode.RATE_LIMITED,
+                "Groq API rate limit 초과로 요청에 실패했습니다. 잠시 후 다시 시도해주세요.", true);
+        given(groqApiClient.generateTourCourse(anyString(), anyString())).willThrow(groqError);
+
+        assertThatThrownBy(() -> tourCourseService.generateTourCourse(validGenerateRequest(), null))
+                .isSameAs(groqError);
+    }
+
+    @Test
+    @DisplayName("실패 - AI가 요청 범위를 벗어난 날짜로 일정을 생성 → AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)")
+    void generateTourCourseFailWhenAiResponseInvalid() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(aiResponse(START_DATE.minusDays(1)));
+
+        AiCourseGenerationException ex = catchThrowableOfType(
+                AiCourseGenerationException.class,
+                () -> tourCourseService.generateTourCourse(validGenerateRequest(), null));
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getErrorCode()).isEqualTo(AiCourseGenerationException.ErrorCode.RESPONSE_VALIDATION_FAILED);
+        assertThat(ex.isRetryable()).isTrue();
+        assertThat(ex.getMessage()).contains("일정 날짜가 요청 범위를 벗어났습니다");
     }
 }

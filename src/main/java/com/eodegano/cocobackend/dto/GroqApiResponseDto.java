@@ -12,12 +12,14 @@ import java.util.List;
 public class GroqApiResponseDto {
 
     private List<Choice> choices;
+    private Usage usage;
 
     @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Choice {
         private Message message;
+        private String finish_reason;
     }
 
     @Getter
@@ -26,5 +28,14 @@ public class GroqApiResponseDto {
     public static class Message {
         private String role;
         private String content;
+    }
+
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Usage {
+        private Integer prompt_tokens;
+        private Integer completion_tokens;
+        private Integer total_tokens;
     }
 }
