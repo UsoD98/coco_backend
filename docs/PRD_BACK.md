@@ -28,7 +28,7 @@ TourAPI를 요청 시점에 라이브 호출(Caffeine 캐시 경유)해 관광 �
 | **알고리즘 추천 (목표)** | `stars`·`likes` 기반 POI 스코어링으로 LLM 없이 여행자 조건 맞춤 코스 추천 |
 | **인증/인가** | JWT Stateless 인증, 카카오 OAuth 연동 |
 | **코스 영속** | 사용자 정의 코스 저장·조회·삭제, 공유 스냅샷 생성 |
-| **POI 큐레이션** | 지역·인원버킷·테마 기반 필터링된 POI 목록 응답 |
+| **POI 큐레이션** | 지역·콘텐츠 유형 기반 필터링된 POI 목록 응답 (인원버킷·테마 필터는 2026-08-22 구현 안 하기로 확정 — BOQ14) |
 
 ---
 
@@ -110,7 +110,7 @@ com.eodegano.cocobackend/
 - 라이브 호출 결과는 Caffeine 캐시(지역 후보 리스트, TTL 6h)를 경유해 응답 속도와 TourAPI 일일 호출한도를 보호한다.
 - **2026-08-16(v0.5.8) 개선**: 후보 리스트 수집을 7개 콘텐츠타입별로 분리(타입당 최대 3000건, 페이지 크기 100→300)해 물량이 큰 타입이 소형 타입을 밀어내는 편향을 줄이고, 페이지·타입을 가상 스레드로 병렬 수집해 콜드스타트 지연을 단축했다. 동시 HTTP 요청은 `Semaphore(4)`로 제한하고 429/5xx는 재시도(최대 3회) — 일일 호출 한도 1000건 기준 후보 캐시 워밍에 최대 280건/일을 쓰고 나머지는 상세조회용으로 남긴다. 배포 직후·TTL 만료 전에는 `PoiCacheWarmupScheduler`가 백그라운드로 캐시를 미리 채운다.
 - POI 개별 상세(`detailCommon2`/`detailIntro2`/`detailInfo2`)도 `contentId` 키로 별도 Caffeine 캐시(TTL 6h)에 담아 코스 생성·조회·공개 view가 공통 재사용한다.
-- 큐레이션 조회 API: 지역(sigunguCode)·인원 버킷(1/2/3-4)·테마·콘텐츠 유형을 파라미터로 받아 필터링된 POI 목록 반환 (좌표·썸네일·예산 기본값 포함). 필터링·정렬은 라이브 조회 결과를 애플리케이션 메모리에서 처리.
+- 큐레이션 조회 API: 지역(sigunguCode)·콘텐츠 유형을 파라미터로 받아 필터링된 POI 목록 반환 (좌표·썸네일 포함). 필터링·정렬은 라이브 조회 결과를 애플리케이션 메모리에서 처리. 인원 버킷(`peopleCount`)·테마(`theme`) 필터는 2026-08-22 구현 안 하기로 확정(BOQ14) — 파라미터 자체를 받지 않음.
 - 별점(`stars`)·좋아요(`likes`)는 TourAPI에 없는 앱 자체 데이터이므로 `poi_rating` 테이블(`contentId` PK)에서 별도 관리 — 좋아요/평점 액션 시 on-demand 행 생성, TourAPI 존재 여부 재검증 없음.
 - **폐지된 설계**: 월별 마이그레이션 배치(`DataMigrationController`/`DataMigrationService`), `ON DUPLICATE KEY UPDATE` 업서트 패턴 — 로컬 적재 자체가 없으므로 더 이상 불필요.
 
@@ -288,7 +288,7 @@ com.eodegano.cocobackend/
 
 | 메서드 | 경로 | 설명 | 구현 |
 | --- | --- | --- | --- |
-| GET | `/` | 큐레이션 POI 목록 (지역·유형 필터만 구현, 인원버킷·테마·avgPrice는 보류 — BOQ14) | 🔧 |
+| GET | `/` | 큐레이션 POI 목록 (지역·유형 필터가 최종 스코프, 인원버킷·테마·avgPrice는 구현 안 하기로 확정 — BOQ14) | ✅ |
 | GET | `/{contentId}` | POI 상세 통합 조회 | ✅ |
 | POST | `/{contentId}/like` | POI 좋아요 토글 (인증 필요) | ✅ |
 
@@ -318,7 +318,7 @@ com.eodegano.cocobackend/
 - **BOQ12. `stars`·`likes` 데이터 수집 방법** — 부분 확정: `likes`는 PO5 좋아요 토글 API(v0.2.6)로 앱 내 수집. `stars`는 AI 검색 기반 수동 입력 예정 (크롤링 방법 미확정). v0.5.0부터 저장 위치는 `poi_rating` 테이블.
 - **BOQ13. Caffeine 캐시 TTL** — ✅ **확정 (v0.5.0)**: 지역 POI 후보 리스트·POI 개별 상세 모두 TTL 6시간. 소규모 트래픽 특성상 신선도·호출량 절감 사이 타협점으로 결정. Redis 대신 Caffeine 채택 이유: 1GB 메모리 프리티어 서버에서 별도 프로세스 오버헤드를 피하기 위함.
 - **BOQ14. 예산 메타데이터 근거 테이블 소실** — ✅ **확정 (2026-08-16)**: `food_avg_price`(BU1 음식점 평균 객단가) 테이블이 로컬 DB 미저장 원칙에 따라 제거된 뒤, 대체 데이터 소스를 찾지 않고 BU1 기능 자체를 취소하기로 결정. `GET /api/v1/poi`의 `avgPrice`는 계속 항상 `null` 반환 (의도된 최종 동작, TODO 아님). **BU2(숙박 인원별 분류)는 2026-08-08 기획 결정으로 스코프 아웃 확정** — `peopleCount`는 필수 입력 파라미터로만 받고 필터링에는 사용하지 않음.
-  - **TODO**: `theme`(테마 필터링) 파라미터는 데이터 소스·매핑 설계가 없어 현재 미구현 상태로 보류됨 (컨트롤러에서 파라미터 자체를 받지 않음). 설계 확정 후 추가 필요.
+  - **theme(테마 필터링) — ✅ 확정 (2026-08-22): 구현하지 않기로 결정**. 이전에는 "데이터 소스·매핑 설계가 없어 보류, 설계 확정 후 추가 필요"라는 TODO였으나, `peopleCount`(BU2)와 함께 착수하지 않기로 최종 결정. `GET /api/v1/poi`는 `sigunguCode`·`contentTypeId` 필터만을 최종 스코프로 유지하며 `theme` 파라미터는 컨트롤러에서 계속 받지 않는다. 재검토 예정 없음. (`mst_theme` 마스터 테이블은 기준정보로만 남고 이 API와는 연결하지 않음)
 - **BOQ15. DB·외부 API(TourAPI) 연동 통합 테스트 인프라** — 🔶 **v0.5.3 신규, TODO(당장 착수 안 함)**: 현재 테스트는 Mockito 단위 테스트(`PoiCurationServiceImplTest`·`PoiDetailServiceImplTest`·`PoiLikeServiceImplTest`·`TourLiveDataServiceTest`)와 `@WebMvcTest` 슬라이스 테스트(`PoiControllerTest`, 서비스 계층은 Mock)까지만 구성되어 있고, 실제 MariaDB 쓰기(`PoiRating`/`UserPoiLike` insert·update)와 실제 TourAPI 응답 계약을 검증하는 테스트는 없음. 도입 시 필요한 것: (1) Testcontainers 기반 MariaDB 통합 테스트 환경, (2) `TourApiClient`가 `RestClient.create()`를 필드에서 직접 생성해 현재는 가로챌 수 없으므로 `RestClient.Builder` 주입으로 리팩터링 후 `MockRestServiceServer`/WireMock으로 스텁. 필요성은 확인됐으나 우선순위가 낮아 보류 — 착수 시점에 재검토.
 - **BOQ16. 무중단 배포 전환** — 🔶 **2026-08-22 신규, TODO(개발 완료 후 추가 개발)**: 현재 배포(`.github/workflows/deploy.yml`)는 `systemctl restart cocobackend` 단일 호출이라 재시작 중 다운타임 발생. Docker/K8s 도입 없이 지금의 systemd 직접 배포 방식을 유지하면서 무중단 전환 가능 — systemd 유닛 2개(blue/green, 서로 다른 포트)를 nginx 리버스 프록시로 전환하는 방식이 방향. 배포 스크립트에서 비활성 인스턴스 배포·헬스체크·nginx upstream 전환·구인스턴스 종료 순서로 구현. Caffeine 캐시(BOQ13)가 인스턴스 로컬이라 전환 직후 새 인스턴스는 콜드스타트 상태 — `PoiCacheWarmupScheduler`가 완화하나 전환 타이밍 유의 필요. 상세: [FEATURES_BACK.md INF7](FEATURES_BACK.md#0-공통-인프라-cross-cutting).
 - **BOQ17. PO5 좋아요 토글 동시 요청(중복 클릭·재시도) 경합 처리** — 🔶 **2026-08-22 신규, TODO(고도화 — 당장 착수 안 함)**: 동일 유저가 같은 POI에 짧은 시간 내 좋아요 요청을 중복 전송하면(더블탭, 네트워크 재시도), `user_poi_like` 복합키(`userId`+`contentId`) 유니크 제약 덕분에 중복 행 삽입이나 `likes` 카운트 오적산 같은 데이터 정합성 붕괴는 이미 방지되어 있음. 다만 나중에 도착한 요청은 INSERT 시 `DataIntegrityViolationException`으로 트랜잭션이 롤백되어 500 에러로 응답됨 — 데이터는 안전하지만 UX가 매끄럽지 않음. 심각도가 낮아 지금은 보류하고, 실제 사용자 리포트나 로그로 관측되면 `PoiLikeServiceImpl.toggleLike`의 insert 경로에서 해당 예외를 잡아 "이미 좋아요 상태"로 처리하는 가벼운 방어 코드를 추가하는 방향(비관적 락 등 무거운 해법은 불필요 판단).

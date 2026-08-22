@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-08-22
+
+### Changed
+
+#### `GET /api/v1/poi`(PO2) — `peopleCount`·`theme` 필터 구현 안 하기로 확정 (BOQ14)
+
+기획 재검토 결과 큐레이션 POI 목록 조회의 필터 스코프를 `sigunguCode`·`contentTypeId` 두 개로 최종 확정했다. 문서상 상태만 정리, 코드 변경 없음(두 파라미터 모두 애초에 컨트롤러가 받고 있지 않았음).
+
+- `peopleCount`: 이미 2026-08-08 BU2 스코프아웃 결정으로 필터링에 미사용 확정된 상태 — 문서상 "🔧 미완성" 표기를 "✅ 의도적 미구현"으로 정리
+- `theme`: 기존에는 "데이터 소스·매핑 설계 후 추가 예정" TODO였으나, 착수하지 않기로 결정 — `mst_theme` 마스터 테이블은 유지하되 이 API와는 연결하지 않음
+- `PO2` 구현 상태를 🔧 → ✅로 변경 (남은 스코프인 지역·유형 필터가 최종 형태)
+
+### Files Changed (2 files)
+
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+
 ## [0.6.5] - 2026-08-22
 
 ### Fixed
