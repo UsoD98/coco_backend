@@ -161,6 +161,8 @@ class TourCourseServiceImplTest {
         assertThat(place.getThumbnailImg()).isEqualTo("http://img.jpg");
         assertThat(place.getOperatingHours()).isEqualTo("상시 개방");
         assertThat(place.getCost()).isEqualTo(5000);
+        assertThat(place.getMapx()).isEqualByComparingTo(new BigDecimal("129.0"));
+        assertThat(place.getMapy()).isEqualByComparingTo(new BigDecimal("35.0"));
     }
 
     @Test

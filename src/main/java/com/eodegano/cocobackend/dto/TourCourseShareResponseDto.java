@@ -3,6 +3,7 @@ package com.eodegano.cocobackend.dto;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -39,5 +40,7 @@ public class TourCourseShareResponseDto {
         private String thumbnailImg;
         private String operatingHours;
         private Integer cost;
+        private BigDecimal mapx;
+        private BigDecimal mapy;
     }
 }
