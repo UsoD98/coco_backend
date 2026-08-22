@@ -208,6 +208,7 @@
 - **구현 상태**: ✅ (`POST /api/v1/poi/{contentId}/like`, 인증 필수) — `TourRepository` 의존 제거하고 `PoiRatingRepository` 기반으로 재구현 필요
 - **FE 의존**: S2 플래너 POI 카드 좋아요 버튼.
 - **가치**: likes 데이터 축적 → CO6 추천 품질 향상의 원천 데이터.
+- **TODO (고도화, 2026-08-22)**: 동시 중복 요청(더블탭·재시도) 경합 시 나중 요청이 유니크 제약 위반으로 500 에러 반환 가능. 데이터 정합성은 PK 제약으로 이미 보호되어 있어 심각도 낮음, 당장 착수 안 함. 상세: [PRD_BACK.md BOQ17](PRD_BACK.md#9-가정-및-미결-open-questions).
 
 ### PO4. 시군구 목록 및 데이터 보유 플래그 조회 (취소)
 
