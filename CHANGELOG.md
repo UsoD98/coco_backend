@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-22
+
+### Testing
+
+#### AI 코스 생성(v0.6.1 HTTP 499 처리) 단위/슬라이스 테스트 추가
+
+`generateTourCourse()`(AI 코스 생성 엔트리포인트)가 기존에 테스트 없이 남아 있던 것을 보완. `GroqApiClient`는 목(mock)으로 대체해 실제 Groq 호출 없이 요청/응답 형태와 에러 매핑만 검증.
+
+- `TourCourseServiceImplTest`: 성공 시 저장·응답 DTO 필드 검증, Groq 예외가 감싸지지 않고 그대로 전파되는지, AI가 검증 규칙(날짜 범위)을 위반한 응답을 생성했을 때 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)`이 발생하는지 3건 추가
+- `TourCourseControllerTest`: `AiCourseGenerationException` 발생 시 실제 HTTP **499** + `data.errorCode`/`retryable`/`finishReason` 바디까지 `GlobalExceptionHandler` 경유로 검증하는 슬라이스 테스트 1건 추가
+- AssertJ `catchThrowableOfType(callable, class)` 오버로드가 현재 버전(3.27.7)에서 deprecated라 `catchThrowableOfType(class, callable)`로 사용
+
+### Files Changed (2 files)
+
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/controller/TourCourseControllerTest.java`
+
 ## [0.6.1] - 2026-08-22
 
 ### Added
