@@ -15,4 +15,5 @@ public class PoiCurationItemDto {
     private BigDecimal mapy;
     private String thumbnail;
     private Integer avgPrice;
+    private boolean liked;
 }

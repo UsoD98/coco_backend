@@ -186,7 +186,7 @@
 - **가치**: 모든 POI·예산·코스 기능의 데이터 원천 (배치 대신 요청 시점 실시간 원천으로 전환).
 
 ### PO2. 큐레이션 POI 목록 조회
-- **설명**: 지역(sigunguCode)·인원 버킷(1/2/3-4)·테마·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일, 예상 객단가 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리.
+- **설명**: 지역(sigunguCode)·인원 버킷(1/2/3-4)·테마·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일, 예상 객단가 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리. **v0.6.4**: 각 아이템에 로그인 사용자의 좋아요 여부(`liked`, boolean) 추가 — 비로그인/탈퇴 사용자는 항상 `false`.
 - **상태**: TourAPI가 데이터 없는 시군구 응답 → 빈 배열 + `available: false` 플래그 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: 🔧 (`GET /api/v1/poi` 구현됨 — `sigunguCode`(필수)·`contentTypeId`(선택) 필터만 동작. `peopleCount`는 필수 파라미터로만 받고 필터링에는 미사용(BU2 스코프 아웃), `theme`은 파라미터 자체 미수신, `avgPrice`는 BU1 취소로 항상 `null` 반환)
@@ -194,7 +194,7 @@
 - **가치**: F1 인원수 기반 큐레이션의 핵심 응답.
 
 ### PO3. POI 상세 통합 조회
-- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유).
+- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유). **v0.6.4**: 로그인 사용자의 좋아요 여부(`liked`, boolean)와 `poi_rating.likes` 기반 총 좋아요 수(`totalLiked`, int) 추가.
 - **상태**: TourAPI에 존재하지 않는 contentId → 404 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`GET /api/v1/poi/{contentId}`, 인증 불필요) — `avgPrice`는 BU1 취소로 항상 `null` 반환 (PO2와 동일)

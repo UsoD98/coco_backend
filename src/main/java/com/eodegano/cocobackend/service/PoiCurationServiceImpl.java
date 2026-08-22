@@ -2,10 +2,14 @@ package com.eodegano.cocobackend.service;
 
 import com.eodegano.cocobackend.dto.PoiCurationItemDto;
 import com.eodegano.cocobackend.dto.PoiCurationResponseDto;
+import com.eodegano.cocobackend.repository.UserPoiLikeRepository;
+import com.eodegano.cocobackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** GBC017 큐레이션 POI 목록 조회 (GET /api/v1/poi) */
@@ -16,9 +20,11 @@ public class PoiCurationServiceImpl implements PoiCurationService {
     private static final String GYEONGBUK_AREA_CODE = "35";
 
     private final TourLiveDataService tourLiveDataService;
+    private final UserRepository userRepository;
+    private final UserPoiLikeRepository userPoiLikeRepository;
 
     @Override
-    public PoiCurationResponseDto getPoiList(String sigunguCode, Integer peopleCount, Integer contentTypeId) {
+    public PoiCurationResponseDto getPoiList(String sigunguCode, Integer peopleCount, Integer contentTypeId, String userEmail) {
         if (sigunguCode == null || sigunguCode.isBlank()) {
             throw new IllegalArgumentException("sigunguCode는 필수입니다");
         }
@@ -40,8 +46,10 @@ public class PoiCurationServiceImpl implements PoiCurationService {
                     .build();
         }
 
+        Set<Long> likedContentIds = resolveLikedContentIds(userEmail, filtered.stream().map(PoiSummary::contentId).toList());
+
         List<PoiCurationItemDto> items = filtered.stream()
-                .map(this::toItemDto)
+                .map(p -> toItemDto(p, likedContentIds))
                 .collect(Collectors.toList());
 
         return PoiCurationResponseDto.builder()
@@ -50,7 +58,17 @@ public class PoiCurationServiceImpl implements PoiCurationService {
                 .build();
     }
 
-    private PoiCurationItemDto toItemDto(PoiSummary p) {
+    /** 로그인 사용자가 없거나(비로그인·탈퇴 등) 조회 대상이 없으면 빈 Set — liked=false로 안전 처리 */
+    private Set<Long> resolveLikedContentIds(String userEmail, List<Long> contentIds) {
+        if (userEmail == null || contentIds.isEmpty()) {
+            return Set.of();
+        }
+        return userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+                .map(user -> (Set<Long>) new HashSet<>(userPoiLikeRepository.findContentIdsByUserIdAndContentIdIn(user.getId(), contentIds)))
+                .orElseGet(Set::of);
+    }
+
+    private PoiCurationItemDto toItemDto(PoiSummary p, Set<Long> likedContentIds) {
         return PoiCurationItemDto.builder()
                 .contentId(p.contentId())
                 .contentTypeId(p.contentTypeId())
@@ -59,6 +77,7 @@ public class PoiCurationServiceImpl implements PoiCurationService {
                 .mapy(p.mapy())
                 .thumbnail(p.firstimage())
                 .avgPrice(null) // TODO(BOQ14): food_avg_price 근거 테이블 소실 — 데이터 소스 확정 전까지 항상 null. docs/PRD_BACK.md BOQ14 참고
+                .liked(likedContentIds.contains(p.contentId()))
                 .build();
     }
 

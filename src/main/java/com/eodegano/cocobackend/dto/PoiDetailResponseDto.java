@@ -23,4 +23,6 @@ public class PoiDetailResponseDto {
     private BigDecimal mapy;
     private Integer avgPrice;
     private List<PoiInfoItemDto> infoList;
+    private boolean liked;
+    private int totalLiked;
 }

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-08-22
+
+### Added
+
+#### POI 목록/상세 조회 응답에 좋아요 여부(liked)·총 좋아요 수(totalLiked) 추가
+
+프론트가 POI 카드·상세 화면에서 좋아요 버튼 상태와 총 좋아요 수를 표시할 수 있도록 필드 추가.
+
+- `GET /api/v1/poi`(PO2)·`GET /api/v1/poi/{contentId}`(PO3) 둘 다 로그인 사용자의 좋아요 여부(`liked`, boolean) 추가 — `user_poi_like` 테이블 기준
+- `GET /api/v1/poi/{contentId}`에는 `poi_rating.likes` 기반 총 좋아요 수(`totalLiked`, int)도 추가
+- 두 API 모두 `permitAll`(비로그인 허용)이므로 비로그인·유효 토큰이지만 사용자 미조회(탈퇴 등)인 경우 예외 없이 `liked=false`로 안전 처리
+- 목록 조회는 N개 POI를 한 번에 반환하므로 `UserPoiLikeRepository.findContentIdsByUserIdAndContentIdIn()` 벌크 조회를 신규 추가해 건당 exists 쿼리(N+1) 없이 한 번에 좋아요 Set을 구함
+
+### Files Changed (11 files)
+
+- `src/main/java/com/eodegano/cocobackend/controller/PoiController.java`
+- `src/main/java/com/eodegano/cocobackend/dto/PoiCurationItemDto.java`
+- `src/main/java/com/eodegano/cocobackend/dto/PoiDetailResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/repository/UserPoiLikeRepository.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiCurationService.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiCurationServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiDetailService.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiDetailServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/controller/PoiControllerTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiCurationServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiDetailServiceImplTest.java`
+
 ## [0.6.3] - 2026-08-22
 
 ### Added
