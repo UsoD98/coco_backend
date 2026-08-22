@@ -66,9 +66,10 @@ class PoiControllerTest {
                         .mapy(new BigDecimal("35.7903"))
                         .thumbnail("http://img.jpg")
                         .avgPrice(null)
+                        .liked(true)
                         .build()))
                 .build();
-        given(poiCurationService.getPoiList("35130", 2, null)).willReturn(response);
+        given(poiCurationService.getPoiList("35130", 2, null, null)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/poi")
                         .param("sigunguCode", "35130")
@@ -77,7 +78,8 @@ class PoiControllerTest {
                 .andExpect(jsonPath("$.code").value("200"))
                 .andExpect(jsonPath("$.data.available").value(true))
                 .andExpect(jsonPath("$.data.items[0].contentId").value(126289))
-                .andExpect(jsonPath("$.data.items[0].title").value("불국사"));
+                .andExpect(jsonPath("$.data.items[0].title").value("불국사"))
+                .andExpect(jsonPath("$.data.items[0].liked").value(true));
     }
 
     @Test
@@ -121,8 +123,10 @@ class PoiControllerTest {
                         .infoname("입장료")
                         .infotext("어른 6,000원 / 청소년 4,000원")
                         .build()))
+                .liked(true)
+                .totalLiked(5)
                 .build();
-        given(poiDetailService.getPoiDetail(126289L)).willReturn(response);
+        given(poiDetailService.getPoiDetail(126289L, null)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/poi/126289"))
                 .andExpect(status().isOk())
@@ -132,13 +136,15 @@ class PoiControllerTest {
                 .andExpect(jsonPath("$.data.tel").value("054-746-9913"))
                 .andExpect(jsonPath("$.data.mapx").value(129.3316))
                 .andExpect(jsonPath("$.data.infoList[0].infoname").value("입장료"))
-                .andExpect(jsonPath("$.data.infoList[0].infotext").value("어른 6,000원 / 청소년 4,000원"));
+                .andExpect(jsonPath("$.data.infoList[0].infotext").value("어른 6,000원 / 청소년 4,000원"))
+                .andExpect(jsonPath("$.data.liked").value(true))
+                .andExpect(jsonPath("$.data.totalLiked").value(5));
     }
 
     @Test
     @DisplayName("GET /api/v1/poi/{contentId} - 존재하지 않는 contentId → 404")
     void getPoiDetailFailWithNotFound() throws Exception {
-        given(poiDetailService.getPoiDetail(999L))
+        given(poiDetailService.getPoiDetail(999L, null))
                 .willThrow(new NoSuchElementException("존재하지 않는 POI입니다"));
 
         mockMvc.perform(get("/api/v1/poi/999"))
