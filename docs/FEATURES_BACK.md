@@ -83,6 +83,19 @@
 - **FE 의존**: 없음 (인프라).
 - **가치**: 서비스 로직 단위 검증을 넘어 실제 DB 트랜잭션·외부 API 응답 계약 변경까지 자동 검증해 회귀를 조기 발견.
 
+### INF7. 무중단 배포 전환 (TODO — 개발 완료 후 추가 개발, 2026-08-22)
+- **설명**: 현재 배포(INF5)는 `systemctl restart cocobackend` 단일 호출이라 재시작 중 다운타임이 발생. Docker/K8s 없이 지금의 systemd 직접 배포 방식을 유지하면서 무중단 배포로 전환하는 것이 목표.
+- **전환 방향**: systemd + nginx(리버스 프록시) 조합의 블루/그린 배포.
+  - `cocobackend-blue`(예: 8080)·`cocobackend-green`(예: 8081) 두 개의 systemd 유닛으로 동일 jar를 다른 포트에서 운영.
+  - nginx가 활성 포트로만 트래픽을 전달 (현재 서버에 nginx가 없다면 먼저 설치·구성 필요).
+  - 배포 스크립트: 비활성 인스턴스에 새 jar 배포 → 재시작 → 헬스체크 통과 확인 → nginx upstream을 새 인스턴스로 전환(`nginx -s reload`, 무중단) → 이전 인스턴스 종료.
+  - `.github/workflows/deploy.yml`의 빌드·scp 단계는 그대로 재사용하고, 마지막 `Restart service` 스텝만 블루/그린 전환 로직으로 교체.
+- **참고**: Caffeine 캐시(DA5)가 인스턴스 로컬이라 블루/그린 전환 직후 새 인스턴스는 캐시가 비어있는 상태로 시작(콜드스타트) — `PoiCacheWarmupScheduler`가 `ApplicationReadyEvent` 시점에 워밍하므로 큰 문제는 아니나 전환 타이밍에 유의.
+- **MVP**: 🔜 (당장 착수 안 함 — 개발 완료 후 별도 작업으로 진행)
+- **구현 상태**: ❌ (TODO)
+- **FE 의존**: 없음 (인프라).
+- **가치**: 배포 시점 API 응답 끊김 제거.
+
 ---
 
 ## 1. 인증 (Authentication)
