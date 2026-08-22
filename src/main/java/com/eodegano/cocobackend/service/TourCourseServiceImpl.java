@@ -324,6 +324,8 @@ public class TourCourseServiceImpl implements TourCourseService {
                                     .thumbnailImg(thumbnailOf(summaryMap, d.getContentId()))
                                     .operatingHours(operatingHoursOf(detailMap, d.getContentId()))
                                     .cost(resolveCost(d.getType(), detailMap.get(d.getContentId()), d.getCost()))
+                                    .mapx(mapxOf(summaryMap, d.getContentId()))
+                                    .mapy(mapyOf(summaryMap, d.getContentId()))
                                     .build())
                             .collect(Collectors.toList());
                     return TourCourseShareResponseDto.DailySchedule.builder()
@@ -382,6 +384,16 @@ public class TourCourseServiceImpl implements TourCourseService {
     private String titleOf(Map<Long, PoiSummary> summaryMap, Long contentId) {
         PoiSummary s = summaryMap.get(contentId);
         return s != null ? s.title() : "";
+    }
+
+    private BigDecimal mapxOf(Map<Long, PoiSummary> summaryMap, Long contentId) {
+        PoiSummary s = summaryMap.get(contentId);
+        return s != null ? s.mapx() : null;
+    }
+
+    private BigDecimal mapyOf(Map<Long, PoiSummary> summaryMap, Long contentId) {
+        PoiSummary s = summaryMap.get(contentId);
+        return s != null ? s.mapy() : null;
     }
 
     private String operatingHoursOf(Map<Long, PoiDetail> detailMap, Long contentId) {

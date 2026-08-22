@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-08-22
+
+### Added
+
+#### 코스 상세/공유뷰 응답에 지도 좌표(mapx/mapy) 추가
+
+프론트가 코스 상세 화면에서 장소를 지도에 표시할 수 있도록, 일정별 장소에 `mapx`/`mapy` 좌표 필드 추가.
+
+- `TourCourseShareResponseDto.PlaceInfo`에 `mapx`/`mapy`(`BigDecimal`) 필드 추가
+- `GET /api/v1/tour-course/{courseId}`(CO4)·`GET /api/v1/tour-course/{courseId}/view`(SH2) 둘 다 `TourCourseShareResponseDto`를 공유해 한 번의 수정으로 동시 적용
+- **TourAPI 추가 호출 없음**: `buildCourseResponse()`가 이미 `tourLiveDataService.getAllCandidates()`(PO1, Caffeine 캐시 TTL 6h)로 만든 `summaryMap`을 사용 중이었고, `PoiSummary` 레코드에는 이미 `mapx`/`mapy`가 파싱되어 있었음 — 캐시된 값을 DTO에 노출만 함
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseShareResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+
 ## [0.6.2] - 2026-08-22
 
 ### Testing

@@ -153,7 +153,7 @@ com.eodegano.cocobackend/
 - 사용자 정의 코스: `TourCourseUserDefined` (헤더: 인원·기간·이동수단·테마) + `TourCourseUserDefinedDetail` (일정 상세: 날짜·순서·시간·contentId·타입).
 - 비로그인 시 userId=null로 임시 저장 → 로그인 후 `PATCH /{courseId}/assign`으로 소유권 이전(`assignUser()`). (✅ 구현 완료)
 - 코스 목록 조회: `GET /` — 사용자 ID로 전체 코스 목록 반환. (✅ 구현 완료)
-- 코스 상세 조회: `GET /{courseId}` — 소유자 인증 후 헤더+일정 상세 반환. (✅ 구현 완료)
+- 코스 상세 조회: `GET /{courseId}` — 소유자 인증 후 헤더+일정 상세 반환. 일정 상세에 지도 좌표(`mapx`/`mapy`) 포함 (v0.6.3, `GET /{courseId}/view`에도 동일 적용). (✅ 구현 완료)
 - 코스 삭제: `DELETE /{courseId}` — 소유자 인증 후 상세→헤더 순 삭제. (✅ 구현 완료)
 - 코스 제목 수정: `PATCH /{courseId}/title` — 소유권 확인 후 `updateTitle()` 호출. (✅ 구현 완료)
 - 코스 일정 수정: `PATCH /{courseId}` — 소유권 확인 후 일정 상세 전량 교체(삭제 후 재삽입), CO1과 동일한 날짜·contentId·type 검증. (✅ 구현 완료)

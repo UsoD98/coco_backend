@@ -272,7 +272,7 @@
 - **가치**: 컬렉션 화면의 핵심 데이터.
 
 ### CO4. 코스 상세 조회
-- **설명**: 코스 헤더 + 일정 상세(날짜·순서·시간·contentId·장소명·durationMinutes·thumbnailImg·operatingHours·cost) 통합 반환. 소유자 인증 필요. **v0.5.0**: 장소명·썸네일·운영시간·비용은 로컬 `Tour`/detail 테이블 재조회 대신 TourAPI 라이브 조회(PO1, POI 상세 캐시 TTL 6h) 결과로 조립.
+- **설명**: 코스 헤더 + 일정 상세(날짜·순서·시간·contentId·장소명·durationMinutes·thumbnailImg·operatingHours·cost·mapx·mapy) 통합 반환. 소유자 인증 필요. **v0.5.0**: 장소명·썸네일·운영시간·비용은 로컬 `Tour`/detail 테이블 재조회 대신 TourAPI 라이브 조회(PO1, POI 상세 캐시 TTL 6h) 결과로 조립. **v0.6.3**: 장소별 지도 좌표(`mapx`/`mapy`) 추가 — 지도 표현용. 이미 조회 중이던 `PoiSummary`(PO1 캐시)에 좌표가 포함돼 있어 TourAPI 추가 호출 없이 노출만 함.
 - **상태**: 미인증 → 401 / 본인 코스 아님(또는 userId=null 코스) → 403 / 코스 없음 → 404 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`GET /api/v1/tour-course/{courseId}`, 인증 필수, `TourCourseShareResponseDto` 반환)
@@ -330,7 +330,7 @@
 - **가치**: F3 One-Click Share — 서버 저장 없이 courseId 기반 공개 뷰 URL로 공유.
 
 ### SH2. 공개 코스 뷰 (공유 수신자용)
-- **설명**: `courseId`로 코스 일정을 공개 조회. 인증 불필요(게스트 접근). FE는 SH1에서 생성한 링크로 이 API를 호출. 읽기 전용 — 수정·삭제 불가. CO4와 동일한 `TourCourseShareResponseDto` 반환 (durationMinutes·thumbnailImg·operatingHours·cost 포함). **v0.5.0 주의**: 인증 없는 공개 엔드포인트라 반복 호출(봇 포함) 시 TourAPI 호출량이 가장 크게 튈 수 있는 지점 — POI 상세 캐시(TTL 6h) 재사용이 CO4와 공유되어 실제 라이브 호출은 캐시 미스 시에만 발생.
+- **설명**: `courseId`로 코스 일정을 공개 조회. 인증 불필요(게스트 접근). FE는 SH1에서 생성한 링크로 이 API를 호출. 읽기 전용 — 수정·삭제 불가. CO4와 동일한 `TourCourseShareResponseDto` 반환 (durationMinutes·thumbnailImg·operatingHours·cost·mapx·mapy 포함, v0.6.3). **v0.5.0 주의**: 인증 없는 공개 엔드포인트라 반복 호출(봇 포함) 시 TourAPI 호출량이 가장 크게 튈 수 있는 지점 — POI 상세 캐시(TTL 6h) 재사용이 CO4와 공유되어 실제 라이브 호출은 캐시 미스 시에만 발생.
 - **상태**: 코스 없음 → 404 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`GET /api/v1/tour-course/{courseId}/view`, 인증 불필요, `TourCourseShareResponseDto` 반환)
