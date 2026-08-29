@@ -2,6 +2,8 @@
 
 `main` push → GitHub Actions(`.github/workflows/deploy.yml`)가 매번 자동으로 하는 일과, 서버에서 **사람이 딱 한 번만** 해야 하는 일을 분리한 문서다. 아래는 후자다. 이미 기존 `cocobackend` systemd 서비스로 운영 중인 서버(8080 직접 노출)를 전제로 한다.
 
+> **검증 환경**: 2026-08-29 실제 오라클 클라우드 서버(Ubuntu, `apt install nginx`로 설치된 **nginx 1.30.4**)에서 이 문서 그대로 적용해 성공 확인함. 이 버전은 `nginx.conf`가 `include /etc/nginx/conf.d/*.conf;`만 갖고 있고 `sites-enabled`는 include하지 않는 구성이라, 5번의 nginx 사이트 설정은 conf.d 방식을 기본으로 한다(다른 버전/배포판이면 5번의 `grep include` 확인 절차로 재확인).
+
 ## 0. 사전 확인
 
 - 방화벽/보안그룹에서 **80번 포트**가 열려 있는지 확인 (기존에 8080을 직접 열어뒀다면 80으로 교체 — 8080/8081은 이제 nginx 뒤에서만 쓰는 내부 포트).
