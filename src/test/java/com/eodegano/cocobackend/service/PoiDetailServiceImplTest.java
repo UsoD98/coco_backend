@@ -168,4 +168,39 @@ class PoiDetailServiceImplTest {
 
         assertThat(result.isLiked()).isFalse();
     }
+
+    // ───────────────────────────────────────────────
+    // stars 필드
+    // ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("성공 - stars는 poi_rating.stars 값을 그대로 반영")
+    void getPoiDetailStarsFromPoiRating() {
+        PoiFullDetail detail = new PoiFullDetail(
+                126289L, 12, "불국사", null, null, null, null, null, null, null,
+                null, null, List.of()
+        );
+        given(tourLiveDataService.getFullDetail(126289L)).willReturn(detail);
+        given(poiRatingRepository.findById(126289L))
+                .willReturn(Optional.of(PoiRating.builder().contentid(126289L).stars(new BigDecimal("4.5")).likes(5).build()));
+
+        PoiDetailResponseDto result = poiDetailService.getPoiDetail(126289L, null);
+
+        assertThat(result.getStars()).isEqualByComparingTo("4.5");
+    }
+
+    @Test
+    @DisplayName("성공 - poi_rating 행이 없으면 stars=null")
+    void getPoiDetailStarsNullWhenNoPoiRating() {
+        PoiFullDetail detail = new PoiFullDetail(
+                126289L, 12, "불국사", null, null, null, null, null, null, null,
+                null, null, List.of()
+        );
+        given(tourLiveDataService.getFullDetail(126289L)).willReturn(detail);
+        given(poiRatingRepository.findById(126289L)).willReturn(Optional.empty());
+
+        PoiDetailResponseDto result = poiDetailService.getPoiDetail(126289L, null);
+
+        assertThat(result.getStars()).isNull();
+    }
 }

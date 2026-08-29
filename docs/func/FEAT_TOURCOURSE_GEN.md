@@ -41,9 +41,10 @@
 **Service**
 - `TourCourseService` - 인터페이스
 - `TourCourseServiceImpl` - 구현체
-    - `fetchPlacesData()`: DB에서 장소 데이터 조회 및 JSON 변환
+    - `fetchPlacesData()`: DB에서 장소 데이터 조회 및 JSON 변환 — **(v0.6.8)** 선택된 POI를 Haversine 거리로 이동수단별 반경(CAR 60km/PUBLIC_TRANSPORT 25km)으로 지리적 클러스터링해, AI에게는 원본 좌표 대신 클러스터 번호(`g` 필드)만 전달 (WALK는 제외)
+    - `assignGeoClusters()` / `haversineKm()` - **(v0.6.8 신규)** 좌표 기반 그리디 클러스터링 및 두 지점 간 거리 계산
     - `buildUserRequest()`: 사용자 요청 문자열 생성
-    - `validateAiResponse()`: AI 응답 검증 (contentId, 날짜, 타입) — **(v0.6.1)** 검증 실패 시 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)` 발생
+    - `validateAiResponse()`: AI 응답 검증 (contentId, 날짜, 타입) — **(v0.6.1)** 검증 실패 시 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)` 발생. **(v0.6.8)** `validateTravelDistances()` 추가 — 같은 날 연속 방문지 간 실제 좌표 거리가 이동수단별 한계(CAR 120km/PUBLIC_TRANSPORT 50km, 약 2시간 상당)를 초과하면 동일 예외로 실패(재시도 가능)
     - `saveTourCourse()`: DB 저장 (TourCourseUserDefined, TourCourseUserDefinedDetail)
     - 타입별 Repository에서 상세 데이터 조회 (N+1 방지)
 
@@ -81,11 +82,11 @@
 - `prompts/system-prompt.txt` - AI 시스템 프롬프트
     - AI 역할 정의 및 규칙 명시
     - 응답 형식 (JSON only)
-    - 이동수단별 제약사항
+    - 이동수단별 제약사항 — **(v0.6.8)** "CAR 2-3시간/PUBLIC_TRANSPORT 1-2시간" 텍스트 룰(좌표 없이 AI가 거리를 추측하던 방식)을 제거하고, `g`(geo-group) 필드 기반 룰로 교체: 같은 `g`값끼리 하루 일정을 구성하도록 지시, AI가 직접 거리를 추정하지 않도록 명시
     - 운영시간, 식사시간, 숙박 배치 규칙
 - `prompts/daily-schedule-template.txt` - 일정 계획 가이드라인
     - 시간대별 활동 추천
-    - 거리 및 이동시간 계산 방법
+    - 거리 및 이동시간 계산 방법 — **(v0.6.8)** "가까운 장소끼리 묶기" 문구를 "같은 g(geo-group)값끼리 묶기"로 구체화
     - 일정 구성 모범 사례
 
 **Configuration**
@@ -197,8 +198,10 @@ Response (200 OK):
 ### Known Limitations
 - 예산 계산 기능 미구현 (데이터 부족)
 - 교통비 계산 미구현 (2단계 기능)
-- 코스 저장/공유 API 미구현 (로그인 필요 기능)
-- 캐싱 미적용 (향후 시군구별 데이터 캐싱 고려)
+- ~~코스 저장/공유 API 미구현~~ → CO4/CO7/CO8/SH2로 구현 완료
+- ~~캐싱 미적용~~ → v0.5.0부터 Caffeine 캐시(TTL 6h) 적용
 - 비동기 처리 미구현 (향후 CompletableFuture 고려)
+- ~~같은 날 연속 방문지 간 실제 이동거리가 2-3시간을 초과할 수 있음~~ → **(v0.6.8)** 지리적 클러스터링(`g` 필드) + 사후 거리 검증으로 해결
+- 숙소 인원수(peopleCount) 기반 필터링 미구현 — TourAPI `detailInfo2`(객실 정원) 신규 연동 필요, v2로 검토 유예 (v0.6.8)
 
 ---

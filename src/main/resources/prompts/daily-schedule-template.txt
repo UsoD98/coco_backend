@@ -17,5 +17,5 @@ Scheduling Best Practices:
 Place Selection:
 - Prioritize places that match user themes
 - Balance between popular attractions and hidden gems
-- Group nearby places together to minimize travel time
+- Group places with the same "g" (geo-group) value together within a day to minimize travel time
 - Ensure diversity in place types throughout the day

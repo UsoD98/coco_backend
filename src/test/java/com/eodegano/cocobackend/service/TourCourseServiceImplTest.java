@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -305,5 +306,51 @@ class TourCourseServiceImplTest {
         assertThat(ex.getErrorCode()).isEqualTo(AiCourseGenerationException.ErrorCode.RESPONSE_VALIDATION_FAILED);
         assertThat(ex.isRetryable()).isTrue();
         assertThat(ex.getMessage()).contains("일정 날짜가 요청 범위를 벗어났습니다");
+    }
+
+    @Test
+    @DisplayName("성공 - CAR 이동수단 요청 시 AI 후보 데이터에 geo-group(g) 태그가 포함됨")
+    void fetchPlacesDataIncludesGeoGroupTagForCar() {
+        PoiSummary near = candidate(); // 129.0, 35.0
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(near));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(aiResponse(START_DATE));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        tourCourseService.generateTourCourse(validGenerateRequest(), null);
+
+        ArgumentCaptor<String> placesDataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(groqApiClient).generateTourCourse(placesDataCaptor.capture(), anyString());
+        assertThat(placesDataCaptor.getValue()).contains("\"g\":");
+    }
+
+    @Test
+    @DisplayName("실패 - 같은 날 연속 방문지 간 실제 좌표 거리가 CAR 한계(2시간 상당)를 초과 → RESPONSE_VALIDATION_FAILED")
+    void generateTourCourseFailWhenTravelDistanceExceedsLimit() {
+        PoiSummary near = new PoiSummary(100L, 12, "불국사", "http://img.jpg",
+                new BigDecimal("129.0"), new BigDecimal("35.0"), "47130");
+        PoiSummary far = new PoiSummary(200L, 12, "먼 관광지", "http://img.jpg",
+                new BigDecimal("127.0"), new BigDecimal("37.0"), "47130");
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(near, far));
+
+        TourCourseAiResponseDto.PlaceVisit place1 =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+        TourCourseAiResponseDto.PlaceVisit place2 =
+                new TourCourseAiResponseDto.PlaceVisit(2, LocalTime.of(12, 0), "ATTRACTION", 200L, 120);
+        TourCourseAiResponseDto.DailyPlan day =
+                new TourCourseAiResponseDto.DailyPlan(START_DATE, List.of(place1, place2));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(new TourCourseAiResponseDto(List.of(day)));
+
+        AiCourseGenerationException ex = catchThrowableOfType(
+                AiCourseGenerationException.class,
+                () -> tourCourseService.generateTourCourse(validGenerateRequest(), null));
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getErrorCode()).isEqualTo(AiCourseGenerationException.ErrorCode.RESPONSE_VALIDATION_FAILED);
+        assertThat(ex.isRetryable()).isTrue();
+        assertThat(ex.getMessage()).contains("이동거리");
     }
 }

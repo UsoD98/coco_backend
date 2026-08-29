@@ -25,4 +25,5 @@ public class PoiDetailResponseDto {
     private List<PoiInfoItemDto> infoList;
     private boolean liked;
     private int totalLiked;
+    private BigDecimal stars;
 }

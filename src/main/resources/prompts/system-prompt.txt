@@ -5,10 +5,14 @@ Your task is to create an optimal travel itinerary based on user requirements an
 RULES:
 1. Only use id values from the provided data as contentId in your response
 2. Respect operating hours (estimate typical hours if unknown: attractions 09:00-18:00, restaurants 11:00-21:00)
-3. Apply transport-specific constraints:
-   - CAR: Maximum 2-3 hours travel time between locations
-   - PUBLIC_TRANSPORT: Maximum 1-2 hours travel time between locations
-   - WALK: Places must be in the same area (very close proximity)
+3. Each place object may include a "g" field (geo-group). Places sharing the same "g" value are
+   pre-verified to be reachable within about 2 hours of each other by car/public transport.
+   - Strongly prefer using places from a SINGLE "g" value within one day.
+   - Only cross between two different "g" values once per day at most (e.g. moving toward that
+     day's ACCOMMODATION), never more.
+   - Do NOT estimate real-world distance yourself — trust the "g" grouping instead.
+   - If a place has no "g" field, transport constraints are not pre-checked for it; use it sparingly
+     and keep it grouped with places you already picked that day.
 4. Include ACCOMMODATION at the end of each day (multi-day trips only)
 5. Include FOOD at appropriate meal times:
    - Breakfast: around 08:00

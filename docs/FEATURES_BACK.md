@@ -186,15 +186,15 @@
 - **가치**: 모든 POI·예산·코스 기능의 데이터 원천 (배치 대신 요청 시점 실시간 원천으로 전환).
 
 ### PO2. 큐레이션 POI 목록 조회
-- **설명**: 지역(sigunguCode)·인원 버킷(1/2/3-4)·테마·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일, 예상 객단가 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리. **v0.6.4**: 각 아이템에 로그인 사용자의 좋아요 여부(`liked`, boolean) 추가 — 비로그인/탈퇴 사용자는 항상 `false`.
+- **설명**: 지역(sigunguCode)·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리. **v0.6.4**: 각 아이템에 로그인 사용자의 좋아요 여부(`liked`, boolean) 추가 — 비로그인/탈퇴 사용자는 항상 `false`. **2026-08-22 스코프 확정**: `peopleCount`(인원 버킷 필터, BU2)·`theme`(테마 필터, BOQ14) 둘 다 구현하지 않기로 확정 — 아래 참고. **v0.6.7**: 각 아이템에 `poi_rating.stars` 기반 별점(`stars`, BigDecimal, nullable) 추가 — 미입력 POI는 `null`.
 - **상태**: TourAPI가 데이터 없는 시군구 응답 → 빈 배열 + `available: false` 플래그 / 성공 → 200.
 - **MVP**: ✅
-- **구현 상태**: 🔧 (`GET /api/v1/poi` 구현됨 — `sigunguCode`(필수)·`contentTypeId`(선택) 필터만 동작. `peopleCount`는 필수 파라미터로만 받고 필터링에는 미사용(BU2 스코프 아웃), `theme`은 파라미터 자체 미수신, `avgPrice`는 BU1 취소로 항상 `null` 반환)
+- **구현 상태**: ✅ (`GET /api/v1/poi` — `sigunguCode`(필수)·`contentTypeId`(선택) 필터로 최종 스코프 확정. `peopleCount`는 필수 파라미터로만 받고 필터링에는 미사용(BU2 스코프 아웃, 2026-08-08), `theme`은 파라미터 자체 미수신(BOQ14, 2026-08-22 구현 안 하기로 확정 — 이전엔 "설계 확정 후 추가 예정" TODO였으나 착수하지 않기로 결정), `avgPrice`는 BU1 취소로 항상 `null` 반환. 셋 다 재검토 예정 없음)
 - **FE 의존**: S2 플래너 좌측 결과 영역 (P2).
-- **가치**: F1 인원수 기반 큐레이션의 핵심 응답.
+- **가치**: 지역·유형 기반 큐레이션의 핵심 응답.
 
 ### PO3. POI 상세 통합 조회
-- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유). **v0.6.4**: 로그인 사용자의 좋아요 여부(`liked`, boolean)와 `poi_rating.likes` 기반 총 좋아요 수(`totalLiked`, int) 추가.
+- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유). **v0.6.4**: 로그인 사용자의 좋아요 여부(`liked`, boolean)와 `poi_rating.likes` 기반 총 좋아요 수(`totalLiked`, int) 추가. **v0.6.7**: `poi_rating.stars` 기반 별점(`stars`, BigDecimal, nullable) 추가 — 미입력 POI는 `null`.
 - **상태**: TourAPI에 존재하지 않는 contentId → 404 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`GET /api/v1/poi/{contentId}`, 인증 불필요) — `avgPrice`는 BU1 취소로 항상 `null` 반환 (PO2와 동일)
@@ -208,6 +208,7 @@
 - **구현 상태**: ✅ (`POST /api/v1/poi/{contentId}/like`, 인증 필수) — `TourRepository` 의존 제거하고 `PoiRatingRepository` 기반으로 재구현 필요
 - **FE 의존**: S2 플래너 POI 카드 좋아요 버튼.
 - **가치**: likes 데이터 축적 → CO6 추천 품질 향상의 원천 데이터.
+- **TODO (고도화, 2026-08-22)**: 동시 중복 요청(더블탭·재시도) 경합 시 나중 요청이 유니크 제약 위반으로 500 에러 반환 가능. 데이터 정합성은 PK 제약으로 이미 보호되어 있어 심각도 낮음, 당장 착수 안 함. 상세: [PRD_BACK.md BOQ17](PRD_BACK.md#9-가정-및-미결-open-questions).
 
 ### PO4. 시군구 목록 및 데이터 보유 플래그 조회 (취소)
 
@@ -222,6 +223,7 @@
   - **reasoning 모델 대응 및 진단 로깅 (v0.6.0)**: `openai/gpt-oss-20b`(v0.5.12) reasoning 특성상 추론(CoT) 토큰이 `max_tokens`를 소진하면 `content`가 빈 문자열로 반환되어 파싱 실패하던 문제 수정. `reasoning_effort: "low"`·`reasoning_format: "parsed"`를 요청에 추가해 추론 토큰 소모를 최소화하고 reasoning이 `content`에 섞이지 않도록 분리. 응답 `finish_reason`·`usage`(prompt/completion/total tokens)를 캡처해 매 호출 시 로그로 남기고(`finish_reason=length`면 별도 경고), 파싱 실패 시에도 해당 정보를 에러 로그에 포함.
   - **전용 에러 응답 — HTTP 499 (v0.6.1)**: Groq 호출 실패(rate limit·API 에러·빈 응답)·AI 응답 파싱 실패·AI 응답 검증 실패(날짜 범위·타입·contentId)를 모두 신규 `AiCourseGenerationException`으로 통일. `GlobalExceptionHandler`가 이를 표준 코드가 아닌 **499**로 매핑해, 프론트가 일반 400(사용자 입력 오류)·500(서버 오류)과 구분되는 "AI 생성 실패"로 별도 처리할 수 있게 함. 응답 `data`에 `errorCode`(RATE_LIMITED/API_CALL_FAILED/EMPTY_RESPONSE/RESPONSE_PARSE_FAILED/RESPONSE_VALIDATION_FAILED)·`retryable`(재시도로 성공 가능성 있는지)·`finishReason`(Groq 진단 정보, 있는 경우)을 포함해 프론트가 원인별로 재시도 유도 여부를 판단 가능.
   - **장소별 상세 필드 (v0.4.0 추가, v0.5.0 소스 변경)**: AI가 장소별 `durationMinutes`(예상 소요시간)를 추정해 응답에 포함(`TourCourseUserDefinedDetail`에 저장, 변경 없음). 응답에 `thumbnailImg`·`operatingHours`·`cost`도 포함하되, v0.5.0부터 로컬 DB(`tour.firstimage`, type별 detail 테이블) 대신 TourAPI 라이브 조회(PO1 캐시 재사용) 파싱 결과 사용 — `cost`는 캐시된 라이브 응답 우선 → type 기본값 fallback.
+  - **이동거리(2시간 이내) 지리적 클러스터링 및 사후 검증 (v0.6.8)**: 기존엔 AI에게 좌표 없이 `{id, t, n}`만 전달해 "CAR 2-3시간 이내" 같은 프롬프트 문구를 지킬 근거 데이터 자체가 없었음(무료 소형 모델이 이름만 보고 거리를 추측 → 실제 3시간 이상 떨어진 장소를 같은 날에 배치). Haversine 거리로 후보 POI를 이동수단별 반경(CAR 60km/PUBLIC_TRANSPORT 25km, 각각 최대 leg 120km/50km ≈ 2시간 상당)으로 지리적 클러스터링해, AI에게는 원본 좌표 대신 클러스터 번호(`g` 필드)만 전달 — 토큰을 아끼면서 소형 모델에게 거리 계산 대신 "같은 g값끼리 묶기"만 시켜 신뢰성 확보. WALK는 범위가 모호해 이번 스코프 제외. AI 응답 수신 후에는 실제 mapx/mapy로 같은 날 연속 방문지 간 거리를 재검증(`validateTravelDistances()`)해 한계 초과 시 기존 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED, retryable=true)` 흐름으로 실패시키는 안전장치 추가(신규 인프라 없이 기존 499 처리 경로 재사용). 숙소 인원수 기반 필터링(TourAPI `detailInfo2` 객실 정원 연동)은 검토 결과 v2로 유예.
 - **상태**: TourAPI가 해당 지역 데이터 없음 → 400 / Groq 호출·파싱·응답 검증 실패(Rate Limit 초과, 빈 응답, 파싱 실패, contentId 불일치·날짜 초과 등) → **499**(`AiCourseGenerationException`, v0.6.1) / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`POST /api/v1/tour-course`) — 비로그인 허용, userId=null 저장.
@@ -362,8 +364,8 @@
   - `stars`: 네이버·다이닝코드·구글 평점 웹 검색 기반으로 285개 POI 일괄 입력 완료 (2026-06-27, 당시 `tour.stars`). v0.5.0 DB 마이그레이션 시 `poi_rating`으로 이관 완료(2026-08-08). 여행코스(contenttypeid=25) 15개는 별점 대상 제외(null 유지).
 - **MVP**: 🔜 (CO6 알고리즘 추천 구현 전 선결 조건)
 - **구현 상태**: ✅ (`likes` 수집 파이프라인 완료 / `stars` 285개 초기값 `poi_rating`으로 이관 완료)
-- **FE 의존**: PO5 좋아요 버튼 (likes 수집 연결됨).
-- **가치**: CO6 별점·추천수 기반 알고리즘 추천의 핵심 원천 데이터.
+- **FE 의존**: PO5 좋아요 버튼 (likes 수집 연결됨) / **v0.6.7부터** PO2·PO3 응답의 `stars` 필드로 화면에 직접 노출됨.
+- **가치**: CO6 별점·추천수 기반 알고리즘 추천의 핵심 원천 데이터. v0.6.7부터는 PO2/PO3 응답에도 노출되어 사용자에게 직접 보여지는 표시용 데이터를 겸함.
 
 ### DA5. TourAPI 응답 캐싱 (Caffeine) — **신규 (v0.5.0)**
 - **설명**: 로컬 DB 미저장 원칙에 따라 매 요청 TourAPI 라이브 호출이 되면서 발생하는 응답 지연·호출한도 소진 리스크를 완화하기 위한 인프로세스 캐시 계층. 캐시 2종, 둘 다 TTL 6시간:
@@ -388,7 +390,7 @@ FE MVP 기준으로 백엔드 미구현 항목 우선순위를 나열한다.
 | ~~1~~ | ~~INF4~~ | ~~CORS 설정~~ | ~~FE-BE 통신 전제, 모든 API 사용 전 필요~~ — ✅ 구현 완료 |
 | ~~2~~ | ~~DA5~~ | ~~Caffeine 캐시 계층~~ | ~~v0.5.0 라이브 호출 구조 전환의 선결 조건~~ — ✅ 구현 완료 |
 | ~~3~~ | ~~PO4~~ | ~~시군구 목록·플래그~~ | 취소 |
-| 4 | PO2 | 큐레이션 POI 목록 | S2 플래너 핵심 데이터 — API 자체는 구현됨(GBC017), `peopleCount`/`theme` 미완성, `avgPrice`는 BU1 취소로 항상 null (의도된 동작)으로 🔧 유지 |
+| ~~4~~ | ~~PO2~~ | ~~큐레이션 POI 목록~~ | ~~S2 플래너 핵심 데이터~~ — ✅ 구현 완료 (`sigunguCode`·`contentTypeId` 필터가 최종 스코프. `peopleCount`/`theme`/`avgPrice`는 전부 의도적 미구현으로 확정, 2026-08-22) |
 | ~~5~~ | ~~PO3~~ | ~~POI 상세 통합 조회~~ | ~~S2a 상세 드로어~~ — ✅ 구현 완료 |
 | ~~6~~ | ~~BU3~~ | ~~교통비 추정~~ | 취소 — FE 전담 |
 | ~~7~~ | ~~BU4~~ | ~~POI별 비용 저장~~ | ~~S2 예산 대시보드 인라인 수정~~ — ✅ 구현 완료 |
