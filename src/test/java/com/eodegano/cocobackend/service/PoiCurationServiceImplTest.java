@@ -1,8 +1,10 @@
 package com.eodegano.cocobackend.service;
 
+import com.eodegano.cocobackend.domain.PoiRating;
 import com.eodegano.cocobackend.domain.User;
 import com.eodegano.cocobackend.dto.PoiCurationItemDto;
 import com.eodegano.cocobackend.dto.PoiCurationResponseDto;
+import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.UserPoiLikeRepository;
 import com.eodegano.cocobackend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,9 @@ class PoiCurationServiceImplTest {
 
     @Mock
     private UserPoiLikeRepository userPoiLikeRepository;
+
+    @Mock
+    private PoiRatingRepository poiRatingRepository;
 
     private PoiSummary bulguksa;
     private PoiSummary gyeongjuFood;
@@ -179,5 +184,36 @@ class PoiCurationServiceImplTest {
         PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, "ghost@test.com");
 
         assertThat(result.getItems()).allSatisfy(item -> assertThat(item.isLiked()).isFalse());
+    }
+
+    // ───────────────────────────────────────────────
+    // stars 필드 (평점)
+    // ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("성공 - poi_rating.stars 값을 아이템의 stars로 반영")
+    void getPoiListStarsFromPoiRating() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
+        given(poiRatingRepository.findByContentidIn(List.of(126289L, 999999L)))
+                .willReturn(List.of(PoiRating.builder().contentid(126289L).stars(new BigDecimal("4.5")).likes(0).build()));
+
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, null);
+
+        assertThat(result.getItems())
+                .filteredOn(item -> item.getContentId().equals(126289L))
+                .allSatisfy(item -> assertThat(item.getStars()).isEqualByComparingTo("4.5"));
+        assertThat(result.getItems())
+                .filteredOn(item -> item.getContentId().equals(999999L))
+                .allSatisfy(item -> assertThat(item.getStars()).isNull());
+    }
+
+    @Test
+    @DisplayName("성공 - poi_rating 행이 없으면 stars=null")
+    void getPoiListStarsNullWhenNoPoiRating() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa));
+
+        PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, null);
+
+        assertThat(result.getItems()).allSatisfy(item -> assertThat(item.getStars()).isNull());
     }
 }

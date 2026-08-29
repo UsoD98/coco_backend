@@ -67,6 +67,7 @@ class PoiControllerTest {
                         .thumbnail("http://img.jpg")
                         .avgPrice(null)
                         .liked(true)
+                        .stars(new BigDecimal("4.5"))
                         .build()))
                 .build();
         given(poiCurationService.getPoiList("35130", 2, null, null)).willReturn(response);
@@ -79,7 +80,8 @@ class PoiControllerTest {
                 .andExpect(jsonPath("$.data.available").value(true))
                 .andExpect(jsonPath("$.data.items[0].contentId").value(126289))
                 .andExpect(jsonPath("$.data.items[0].title").value("불국사"))
-                .andExpect(jsonPath("$.data.items[0].liked").value(true));
+                .andExpect(jsonPath("$.data.items[0].liked").value(true))
+                .andExpect(jsonPath("$.data.items[0].stars").value(4.5));
     }
 
     @Test
@@ -125,6 +127,7 @@ class PoiControllerTest {
                         .build()))
                 .liked(true)
                 .totalLiked(5)
+                .stars(new BigDecimal("4.5"))
                 .build();
         given(poiDetailService.getPoiDetail(126289L, null)).willReturn(response);
 
@@ -138,7 +141,8 @@ class PoiControllerTest {
                 .andExpect(jsonPath("$.data.infoList[0].infoname").value("입장료"))
                 .andExpect(jsonPath("$.data.infoList[0].infotext").value("어른 6,000원 / 청소년 4,000원"))
                 .andExpect(jsonPath("$.data.liked").value(true))
-                .andExpect(jsonPath("$.data.totalLiked").value(5));
+                .andExpect(jsonPath("$.data.totalLiked").value(5))
+                .andExpect(jsonPath("$.data.stars").value(4.5));
     }
 
     @Test
