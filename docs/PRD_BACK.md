@@ -244,7 +244,7 @@ com.eodegano.cocobackend/
 2. ~~교통비 추정 계산 로직 및 API~~ (취소 — FE 전담)
 3. ~~예산 메타데이터(평균 객단가) API~~ (취소 — 사용자 직접 입력으로 대체, `tour_course_user_defined_detail.cost` 저장은 구현 완료)
 4. TourAPI 데이터 월 1회 주기 수집 배치 스케줄링
-5. 무중단 배포(blue/green) 전환 — TODO, 개발 완료 후 추가 개발 (BOQ16)
+5. ~~무중단 배포(blue/green) 전환~~ — 레포 측 구현 완료(BOQ16), 서버 최초 1회 설정(`deploy/BLUEGREEN_SETUP.md`)만 수동 적용 대기
 
 > ✅ v0.5.3: POI 큐레이션 전용 조회 API(PO2), POI 상세 통합 조회 API(PO3) 구현 완료.
 
@@ -320,7 +320,7 @@ com.eodegano.cocobackend/
 - **BOQ14. 예산 메타데이터 근거 테이블 소실** — ✅ **확정 (2026-08-16)**: `food_avg_price`(BU1 음식점 평균 객단가) 테이블이 로컬 DB 미저장 원칙에 따라 제거된 뒤, 대체 데이터 소스를 찾지 않고 BU1 기능 자체를 취소하기로 결정. `GET /api/v1/poi`의 `avgPrice`는 계속 항상 `null` 반환 (의도된 최종 동작, TODO 아님). **BU2(숙박 인원별 분류)는 2026-08-08 기획 결정으로 스코프 아웃 확정** — `peopleCount`는 필수 입력 파라미터로만 받고 필터링에는 사용하지 않음.
   - **theme(테마 필터링) — ✅ 확정 (2026-08-22): 구현하지 않기로 결정**. 이전에는 "데이터 소스·매핑 설계가 없어 보류, 설계 확정 후 추가 필요"라는 TODO였으나, `peopleCount`(BU2)와 함께 착수하지 않기로 최종 결정. `GET /api/v1/poi`는 `sigunguCode`·`contentTypeId` 필터만을 최종 스코프로 유지하며 `theme` 파라미터는 컨트롤러에서 계속 받지 않는다. 재검토 예정 없음. (`mst_theme` 마스터 테이블은 기준정보로만 남고 이 API와는 연결하지 않음)
 - **BOQ15. DB·외부 API(TourAPI) 연동 통합 테스트 인프라** — 🔶 **v0.5.3 신규, TODO(당장 착수 안 함)**: 현재 테스트는 Mockito 단위 테스트(`PoiCurationServiceImplTest`·`PoiDetailServiceImplTest`·`PoiLikeServiceImplTest`·`TourLiveDataServiceTest`)와 `@WebMvcTest` 슬라이스 테스트(`PoiControllerTest`, 서비스 계층은 Mock)까지만 구성되어 있고, 실제 MariaDB 쓰기(`PoiRating`/`UserPoiLike` insert·update)와 실제 TourAPI 응답 계약을 검증하는 테스트는 없음. 도입 시 필요한 것: (1) Testcontainers 기반 MariaDB 통합 테스트 환경, (2) `TourApiClient`가 `RestClient.create()`를 필드에서 직접 생성해 현재는 가로챌 수 없으므로 `RestClient.Builder` 주입으로 리팩터링 후 `MockRestServiceServer`/WireMock으로 스텁. 필요성은 확인됐으나 우선순위가 낮아 보류 — 착수 시점에 재검토.
-- **BOQ16. 무중단 배포 전환** — 🔶 **2026-08-22 신규, TODO(개발 완료 후 추가 개발)**: 현재 배포(`.github/workflows/deploy.yml`)는 `systemctl restart cocobackend` 단일 호출이라 재시작 중 다운타임 발생. Docker/K8s 도입 없이 지금의 systemd 직접 배포 방식을 유지하면서 무중단 전환 가능 — systemd 유닛 2개(blue/green, 서로 다른 포트)를 nginx 리버스 프록시로 전환하는 방식이 방향. 배포 스크립트에서 비활성 인스턴스 배포·헬스체크·nginx upstream 전환·구인스턴스 종료 순서로 구현. Caffeine 캐시(BOQ13)가 인스턴스 로컬이라 전환 직후 새 인스턴스는 콜드스타트 상태 — `PoiCacheWarmupScheduler`가 완화하나 전환 타이밍 유의 필요. 상세: [FEATURES_BACK.md INF7](FEATURES_BACK.md#0-공통-인프라-cross-cutting).
+- **BOQ16. 무중단 배포 전환** — ✅ **레포 측 구현 완료 (2026-08-29)**: 기존 `systemctl restart cocobackend` 단일 호출로 인한 다운타임을, systemd 유닛 2개(blue=8080/green=8081)를 nginx 리버스 프록시로 전환하는 blue/green 방식으로 해결. `.github/workflows/deploy.yml`의 마지막 스텝이 비활성 슬롯 배포 → 재시작 → `/actuator/health` 헬스체크 → `deploy/switch-active.sh`로 nginx upstream 전환 → 이전 슬롯 종료 순서로 자동 수행하며, 헬스체크 실패 시 기존 활성 슬롯을 그대로 두고 배포만 실패 처리(자동 롤백 효과). Caffeine 캐시(BOQ13)가 인스턴스 로컬이라 전환 직후 새 인스턴스는 콜드스타트 상태지만 `PoiCacheWarmupScheduler`가 완화. **서버 최초 1회 설정(nginx 설치·systemd 유닛 등록·sudoers)은 자동화 범위 밖 — [deploy/BLUEGREEN_SETUP.md](../deploy/BLUEGREEN_SETUP.md) 절차대로 수동 적용 필요.** 상세: [FEATURES_BACK.md INF7](FEATURES_BACK.md#0-공통-인프라-cross-cutting).
 - **BOQ17. PO5 좋아요 토글 동시 요청(중복 클릭·재시도) 경합 처리** — 🔶 **2026-08-22 신규, TODO(고도화 — 당장 착수 안 함)**: 동일 유저가 같은 POI에 짧은 시간 내 좋아요 요청을 중복 전송하면(더블탭, 네트워크 재시도), `user_poi_like` 복합키(`userId`+`contentId`) 유니크 제약 덕분에 중복 행 삽입이나 `likes` 카운트 오적산 같은 데이터 정합성 붕괴는 이미 방지되어 있음. 다만 나중에 도착한 요청은 INSERT 시 `DataIntegrityViolationException`으로 트랜잭션이 롤백되어 500 에러로 응답됨 — 데이터는 안전하지만 UX가 매끄럽지 않음. 심각도가 낮아 지금은 보류하고, 실제 사용자 리포트나 로그로 관측되면 `PoiLikeServiceImpl.toggleLike`의 insert 경로에서 해당 예외를 잡아 "이미 좋아요 상태"로 처리하는 가벼운 방어 코드를 추가하는 방향(비관적 락 등 무거운 해법은 불필요 판단).
 
 ---

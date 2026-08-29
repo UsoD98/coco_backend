@@ -68,10 +68,10 @@
 - **가치**: FE-BE 통신의 전제.
 
 ### INF5. CI/CD 배포 파이프라인 (GitHub Actions + systemd)
-- **설명**: 오라클 클라우드 Free Tier 백엔드 인스턴스(Ubuntu)에 대한 자동 배포. `main` push 시 Gradle 빌드 → SCP로 jar 전송 → 서버 `.env` 재생성 → `systemctl restart`.
+- **설명**: 오라클 클라우드 Free Tier 백엔드 인스턴스(Ubuntu)에 대한 자동 배포. `main` push 시 Gradle 빌드 → SCP로 jar 전송 → 서버 `.env` 재생성 → 블루/그린 전환(INF7, v0.6.10부터).
 - **상태**: DB 서버와 동일 VCN 내 프라이빗 IP로 통신 (공인 IP 미노출). 앱 런타임 시크릿은 GitHub Secrets를 원본으로 삼아 배포마다 서버 `.env`(`chmod 600`)를 덮어씀.
 - **MVP**: ✅
-- **구현 상태**: ✅ (`.github/workflows/deploy.yml`, `deploy/cocobackend.service`)
+- **구현 상태**: ✅ (`.github/workflows/deploy.yml`, `deploy/cocobackend-blue.service`·`deploy/cocobackend-green.service` — INF7 참고)
 - **FE 의존**: 없음.
 - **가치**: 수동 배포·서버 SSH 접속 없이 push만으로 반영, 시크릿 교체 시에도 서버 접속 불필요.
 
@@ -83,16 +83,15 @@
 - **FE 의존**: 없음 (인프라).
 - **가치**: 서비스 로직 단위 검증을 넘어 실제 DB 트랜잭션·외부 API 응답 계약 변경까지 자동 검증해 회귀를 조기 발견.
 
-### INF7. 무중단 배포 전환 (TODO — 개발 완료 후 추가 개발, 2026-08-22)
-- **설명**: 현재 배포(INF5)는 `systemctl restart cocobackend` 단일 호출이라 재시작 중 다운타임이 발생. Docker/K8s 없이 지금의 systemd 직접 배포 방식을 유지하면서 무중단 배포로 전환하는 것이 목표.
-- **전환 방향**: systemd + nginx(리버스 프록시) 조합의 블루/그린 배포.
-  - `cocobackend-blue`(예: 8080)·`cocobackend-green`(예: 8081) 두 개의 systemd 유닛으로 동일 jar를 다른 포트에서 운영.
-  - nginx가 활성 포트로만 트래픽을 전달 (현재 서버에 nginx가 없다면 먼저 설치·구성 필요).
-  - 배포 스크립트: 비활성 인스턴스에 새 jar 배포 → 재시작 → 헬스체크 통과 확인 → nginx upstream을 새 인스턴스로 전환(`nginx -s reload`, 무중단) → 이전 인스턴스 종료.
-  - `.github/workflows/deploy.yml`의 빌드·scp 단계는 그대로 재사용하고, 마지막 `Restart service` 스텝만 블루/그린 전환 로직으로 교체.
-- **참고**: Caffeine 캐시(DA5)가 인스턴스 로컬이라 블루/그린 전환 직후 새 인스턴스는 캐시가 비어있는 상태로 시작(콜드스타트) — `PoiCacheWarmupScheduler`가 `ApplicationReadyEvent` 시점에 워밍하므로 큰 문제는 아니나 전환 타이밍에 유의.
-- **MVP**: 🔜 (당장 착수 안 함 — 개발 완료 후 별도 작업으로 진행)
-- **구현 상태**: ❌ (TODO)
+### INF7. 무중단 배포 전환 (2026-08-29)
+- **설명**: 기존 배포(INF5)는 `systemctl restart cocobackend` 단일 호출이라 재시작 중 다운타임이 발생하던 문제를 systemd + nginx(리버스 프록시) 조합의 블루/그린 배포로 해결.
+- **구현 방향**: `cocobackend-blue`(8080)·`cocobackend-green`(8081) 두 개의 systemd 유닛(`deploy/cocobackend-blue.service`·`deploy/cocobackend-green.service`)이 각자 디렉토리(`/home/ubuntu/cocobackend-blue`·`-green`)의 jar를 다른 포트에서 운영하고, `.env`는 두 슬롯이 공유(`/home/ubuntu/cocobackend/.env`, 포트만 유닛별 `Environment=SERVER_PORT`로 분리). nginx(`deploy/nginx-cocobackend.conf`)가 `/etc/nginx/conf.d/cocobackend_upstream.conf`가 가리키는 활성 포트로만 트래픽을 전달하고, `deploy/switch-active.sh`가 이 업스트림 파일을 갱신 후 `nginx -s reload`로 무중단 전환한다.
+  - `.github/workflows/deploy.yml`의 빌드·scp·`.env` 작성 단계는 그대로 재사용하고, 마지막 스텝이 `Restart service`(단일 재시작) → `Blue/Green switch`로 교체됨: `active_color` 상태 파일로 비활성 슬롯 판별 → 새 jar 배포 → 재시작 → `/actuator/health` 헬스체크(최대 60초 재시도) 통과 확인 → `switch-active.sh`로 nginx 전환 → `active_color` 갱신 → 이전 슬롯 `systemctl stop`. 헬스체크 실패 시 배포를 실패 처리하고 기존 활성 슬롯은 그대로 유지(자동 롤백 효과).
+  - 헬스체크는 이미 있던 `spring-boot-starter-actuator` + `/actuator/health`(permitAll)를 그대로 재사용 — 애플리케이션 코드 변경 없음.
+- **참고**: Caffeine 캐시(DA5)가 인스턴스 로컬이라 블루/그린 전환 직후 새 인스턴스는 캐시가 비어있는 상태로 시작(콜드스타트) — `PoiCacheWarmupScheduler`가 `ApplicationReadyEvent` 시점에 워밍하므로 큰 문제는 아니나 전환 타이밍에 유의. 1GB 메모리 프리티어 보호를 위해 전환 성공 확인 즉시 이전 슬롯을 중지(standby 유지 안 함).
+- **서버 최초 1회 설정**: nginx 설치·systemd 유닛 등록·sudoers NOPASSWD 등록 등은 레포 작업만으로 자동 적용되지 않아 사람이 직접 적용 — 절차는 [deploy/BLUEGREEN_SETUP.md](../deploy/BLUEGREEN_SETUP.md) 참고.
+- **MVP**: ✅
+- **구현 상태**: 🔧 (레포 측 배포 파일·워크플로 구현 완료 / 서버 최초 1회 설정은 `deploy/BLUEGREEN_SETUP.md`를 보고 수동 적용 대기)
 - **FE 의존**: 없음 (인프라).
 - **가치**: 배포 시점 API 응답 끊김 제거.
 

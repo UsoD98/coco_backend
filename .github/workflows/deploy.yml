@@ -70,11 +70,43 @@ jobs:
             EOF
             chmod 600 /home/ubuntu/cocobackend/.env
 
-      - name: Restart service
+      - name: Blue/Green switch
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            sudo systemctl restart cocobackend
+            set -euo pipefail
+
+            ACTIVE=$(cat /home/ubuntu/cocobackend/active_color 2>/dev/null || echo blue)
+            if [ "$ACTIVE" = "blue" ]; then
+              INACTIVE=green
+              INACTIVE_PORT=8081
+            else
+              INACTIVE=blue
+              INACTIVE_PORT=8080
+            fi
+
+            echo "Active slot: $ACTIVE, deploying to: $INACTIVE (port $INACTIVE_PORT)"
+            cp /home/ubuntu/cocobackend/app.jar /home/ubuntu/cocobackend-$INACTIVE/app.jar
+            sudo systemctl restart cocobackend-$INACTIVE
+
+            HEALTHY=0
+            for i in $(seq 1 30); do
+              if curl -sf "http://127.0.0.1:$INACTIVE_PORT/actuator/health" | grep -q '"status":"UP"'; then
+                HEALTHY=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$HEALTHY" -ne 1 ]; then
+              echo "Health check failed for $INACTIVE on port $INACTIVE_PORT — leaving $ACTIVE active."
+              exit 1
+            fi
+
+            sudo /home/ubuntu/cocobackend/switch-active.sh $INACTIVE_PORT
+            echo "$INACTIVE" > /home/ubuntu/cocobackend/active_color
+            sudo systemctl stop cocobackend-$ACTIVE
+            echo "Switched active slot to $INACTIVE, stopped $ACTIVE."
