@@ -353,4 +353,28 @@ class TourCourseServiceImplTest {
         assertThat(ex.isRetryable()).isTrue();
         assertThat(ex.getMessage()).contains("이동거리");
     }
+
+    @Test
+    @DisplayName("실패 - 마지막 날(체크아웃일)에 ACCOMMODATION이 포함됨 → AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)")
+    void generateTourCourseFailWhenAccommodationOnLastDay() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+
+        TourCourseAiResponseDto.PlaceVisit attraction =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+        TourCourseAiResponseDto.PlaceVisit accommodation =
+                new TourCourseAiResponseDto.PlaceVisit(2, LocalTime.of(21, 0), "ACCOMMODATION", 100L, 0);
+        TourCourseAiResponseDto.DailyPlan lastDay =
+                new TourCourseAiResponseDto.DailyPlan(END_DATE, List.of(attraction, accommodation));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(new TourCourseAiResponseDto(List.of(lastDay)));
+
+        AiCourseGenerationException ex = catchThrowableOfType(
+                AiCourseGenerationException.class,
+                () -> tourCourseService.generateTourCourse(validGenerateRequest(), null));
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getErrorCode()).isEqualTo(AiCourseGenerationException.ErrorCode.RESPONSE_VALIDATION_FAILED);
+        assertThat(ex.isRetryable()).isTrue();
+        assertThat(ex.getMessage()).contains("마지막 날");
+    }
 }

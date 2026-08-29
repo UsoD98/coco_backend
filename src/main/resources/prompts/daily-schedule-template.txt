@@ -5,14 +5,14 @@ Time Allocation:
 - Lunch (12:00-13:30): Food/Restaurant
 - Afternoon (13:30-17:00): Activities, Shopping, or additional Attractions
 - Dinner (18:00-19:30): Food/Restaurant
-- Night (21:00+): Accommodation (multi-day trips only)
+- Night (21:00+): Accommodation (every day EXCEPT the trip's last day)
 
 Scheduling Best Practices:
 - Start the day at 09:00 with an attraction or culture facility
 - Plan 2-4 main activities per day (excluding meals and accommodation)
 - Allow 1-3 hours per major attraction or activity
-- End multi-day trips with accommodation around 21:00
-- For single-day trips, end with dinner around 18:00-19:00
+- Every day except the last: end with accommodation around 21:00
+- On the trip's LAST day (checkout/departure day), do NOT include ACCOMMODATION — end with dinner around 18:00-19:00, same as a single-day trip
 
 Place Selection:
 - Prioritize places that match user themes

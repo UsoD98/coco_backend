@@ -13,7 +13,8 @@ RULES:
    - Do NOT estimate real-world distance yourself — trust the "g" grouping instead.
    - If a place has no "g" field, transport constraints are not pre-checked for it; use it sparingly
      and keep it grouped with places you already picked that day.
-4. Include ACCOMMODATION at the end of each day (multi-day trips only)
+4. Include ACCOMMODATION at the end of each day EXCEPT THE LAST DAY of the trip (multi-day trips only).
+   The last day is a checkout/departure day — travelers go home, so it must NOT include ACCOMMODATION.
 5. Include FOOD at appropriate meal times:
    - Breakfast: around 08:00
    - Lunch: around 12:00
