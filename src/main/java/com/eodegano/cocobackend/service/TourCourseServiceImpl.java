@@ -6,6 +6,7 @@ import com.eodegano.cocobackend.domain.TourCourseUserDefined;
 import com.eodegano.cocobackend.domain.TourCourseUserDefinedDetail;
 import com.eodegano.cocobackend.domain.User;
 import com.eodegano.cocobackend.domain.enums.PlaceType;
+import com.eodegano.cocobackend.domain.enums.TransportType;
 import com.eodegano.cocobackend.dto.TourCourseAiResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseGenerateRequestDto;
 import com.eodegano.cocobackend.dto.TourCourseGenerateResponseDto;
@@ -45,6 +46,14 @@ public class TourCourseServiceImpl implements TourCourseService {
     private static final int MAX_TRIP_DAYS = 7;
     private static final double TIER_A_RATIO = 0.7;
 
+    // 이동거리 클러스터링/검증 기준 (v0.6.8 — 도보는 애매성으로 제외, 대중교통/차만 적용)
+    // CAR: 2시간 이내 이동을 목표로, 실효 평균속도(정체·국도 등 고려) 약 60km/h 가정 -> 최대 120km
+    private static final double CAR_MAX_LEG_KM = 120.0;
+    private static final double CAR_CLUSTER_RADIUS_KM = 60.0;
+    // PUBLIC_TRANSPORT: 환승/대기 포함 실효 평균속도 약 25km/h 가정 -> 최대 50km
+    private static final double TRANSIT_MAX_LEG_KM = 50.0;
+    private static final double TRANSIT_CLUSTER_RADIUS_KM = 25.0;
+
     private static final int QUOTA_FOOD          = MEALS_PER_DAY * MAX_TRIP_DAYS;
     private static final int QUOTA_ACCOMMODATION =  4;
     private static final int QUOTA_ATTRACTION    = 12;
@@ -82,10 +91,10 @@ public class TourCourseServiceImpl implements TourCourseService {
 
         log.info("Generating tour course for user: {}, request: {}", userId, request);
 
-        String placesData = fetchPlacesData(request.getSigunguCodes());
+        String placesData = fetchPlacesData(request.getSigunguCodes(), request.getTransport());
         String userRequest = buildUserRequest(request);
         TourCourseAiResponseDto aiResponse = groqApiClient.generateTourCourse(placesData, userRequest);
-        validateAiResponse(aiResponse, request.getStartDate(), request.getEndDate());
+        validateAiResponse(aiResponse, request.getStartDate(), request.getEndDate(), request.getTransport());
         TourCourseUserDefined savedCourse = saveTourCourse(request, userId, aiResponse);
         return buildGenerateResponse(savedCourse.getId(), aiResponse);
     }
@@ -442,10 +451,11 @@ public class TourCourseServiceImpl implements TourCourseService {
     // ── POI 샘플링 ────────────────────────────────────────────────────────────
 
     /** TourAPI 라이브 후보(PoiSummary) + poi_rating(stars/likes)를 합친 샘플링용 뷰 */
-    private record RatedPoi(Long contentId, Integer contentTypeId, String title, BigDecimal stars, Integer likes) {
+    private record RatedPoi(Long contentId, Integer contentTypeId, String title, BigDecimal stars, Integer likes,
+                             BigDecimal mapx, BigDecimal mapy) {
     }
 
-    private String fetchPlacesData(List<String> sigunguCodes) {
+    private String fetchPlacesData(List<String> sigunguCodes, TransportType transport) {
         log.info("Fetching places data for sigunguCodes: {}", sigunguCodes);
 
         List<PoiSummary> allCandidates = tourLiveDataService.getAllCandidates();
@@ -469,13 +479,75 @@ public class TourCourseServiceImpl implements TourCourseService {
                     PoiRating r = ratingsById.get(p.contentId());
                     return new RatedPoi(p.contentId(), p.contentTypeId(), p.title(),
                             r != null ? r.getStars() : null,
-                            r != null ? r.getLikes() : null);
+                            r != null ? r.getLikes() : null,
+                            p.mapx(), p.mapy());
                 })
                 .collect(Collectors.toList());
 
         List<RatedPoi> selected = selectByTypeQuota(ratedPois);
-        log.info("Selected {} places for AI (from {} total)", selected.size(), ratedPois.size());
-        return buildPlacesJson(selected);
+        Map<Long, Integer> geoClusters = assignGeoClusters(selected, transport);
+        log.info("Selected {} places for AI (from {} total), {} geo-clusters", selected.size(), ratedPois.size(), geoClusters.values().stream().distinct().count());
+        return buildPlacesJson(selected, geoClusters);
+    }
+
+    // ── 이동거리 클러스터링 (좌표 기반, LLM에게는 그룹 태그만 전달) ────────────────
+
+    /**
+     * 선택된 POI들을 좌표 기준으로 지리적 그룹으로 묶는다. AI에게 원본 좌표를 주고 거리를
+     * 계산시키는 대신, 이미 이동 가능 범위(2시간 이내)로 묶인 그룹 태그만 전달해
+     * 토큰을 아끼고 소형 모델의 거리 추정 오류를 원천 차단한다.
+     * WALK는 범위가 모호해 그룹핑 대상에서 제외(전량 미분류).
+     */
+    private Map<Long, Integer> assignGeoClusters(List<RatedPoi> pois, TransportType transport) {
+        if (transport == TransportType.WALK) {
+            return Collections.emptyMap();
+        }
+        double joinRadiusKm = (transport == TransportType.CAR) ? CAR_CLUSTER_RADIUS_KM : TRANSIT_CLUSTER_RADIUS_KM;
+
+        List<double[]> centroids = new ArrayList<>(); // [lat, lon, count]
+        Map<Long, Integer> clusterByContentId = new HashMap<>();
+
+        for (RatedPoi poi : pois) {
+            if (poi.mapx() == null || poi.mapy() == null) continue;
+            double lat = poi.mapy().doubleValue();
+            double lon = poi.mapx().doubleValue();
+
+            int nearestIdx = -1;
+            double nearestDist = Double.MAX_VALUE;
+            for (int i = 0; i < centroids.size(); i++) {
+                double[] c = centroids.get(i);
+                double d = haversineKm(lat, lon, c[0], c[1]);
+                if (d < nearestDist) {
+                    nearestDist = d;
+                    nearestIdx = i;
+                }
+            }
+
+            if (nearestIdx >= 0 && nearestDist <= joinRadiusKm) {
+                double[] c = centroids.get(nearestIdx);
+                double count = c[2];
+                c[0] = (c[0] * count + lat) / (count + 1);
+                c[1] = (c[1] * count + lon) / (count + 1);
+                c[2] = count + 1;
+                clusterByContentId.put(poi.contentId(), nearestIdx);
+            } else {
+                centroids.add(new double[]{lat, lon, 1});
+                clusterByContentId.put(poi.contentId(), centroids.size() - 1);
+            }
+        }
+
+        return clusterByContentId;
+    }
+
+    private static double haversineKm(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     private List<RatedPoi> selectByTypeQuota(List<RatedPoi> allPois) {
@@ -557,14 +629,20 @@ public class TourCourseServiceImpl implements TourCourseService {
         }
     }
 
-    private String buildPlacesJson(List<RatedPoi> pois) {
+    private String buildPlacesJson(List<RatedPoi> pois, Map<Long, Integer> geoClusters) {
+        boolean hasClusters = !geoClusters.isEmpty();
         StringBuilder json = new StringBuilder("[");
         for (int i = 0; i < pois.size(); i++) {
             RatedPoi poi = pois.get(i);
             json.append("{\"id\":").append(poi.contentId())
                 .append(",\"t\":\"").append(getPlaceType(poi.contentTypeId()))
                 .append("\",\"n\":\"").append(escapeJson(poi.title()))
-                .append("\"}");
+                .append("\"");
+            if (hasClusters) {
+                Integer g = geoClusters.get(poi.contentId());
+                json.append(",\"g\":").append(g != null ? g : "null");
+            }
+            json.append("}");
             if (i < pois.size() - 1) json.append(",");
         }
         json.append("]");
@@ -600,7 +678,8 @@ public class TourCourseServiceImpl implements TourCourseService {
         );
     }
 
-    private void validateAiResponse(TourCourseAiResponseDto aiResponse, LocalDate startDate, LocalDate endDate) {
+    private void validateAiResponse(TourCourseAiResponseDto aiResponse, LocalDate startDate, LocalDate endDate,
+                                     TransportType transport) {
         if (aiResponse == null || aiResponse.getSchedule() == null || aiResponse.getSchedule().isEmpty()) {
             throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
                     "AI 응답이 비어있습니다", true);
@@ -640,7 +719,49 @@ public class TourCourseServiceImpl implements TourCourseService {
                     "AI가 존재하지 않는 장소 ID를 생성했습니다", true);
         }
 
+        if (transport != TransportType.WALK) {
+            validateTravelDistances(aiResponse, transport);
+        }
+
         log.info("AI response validation successful");
+    }
+
+    /**
+     * 사후 검증 안전장치: 클러스터 태그로 사전 필터링을 해도 AI가 그룹을 무시하고
+     * 배치할 수 있으므로, 실제 좌표(mapx/mapy)로 하루 내 연속 이동 구간의 거리를 계산해
+     * 이동수단별 한계(2시간 상당)를 넘으면 재시도 가능한 예외로 실패시킨다.
+     */
+    private void validateTravelDistances(TourCourseAiResponseDto aiResponse, TransportType transport) {
+        double maxLegKm = (transport == TransportType.CAR) ? CAR_MAX_LEG_KM : TRANSIT_MAX_LEG_KM;
+
+        Map<Long, PoiSummary> coordMap = tourLiveDataService.getAllCandidates().stream()
+                .collect(Collectors.toMap(PoiSummary::contentId, p -> p, (a, b) -> a));
+
+        for (TourCourseAiResponseDto.DailyPlan day : aiResponse.getSchedule()) {
+            if (day.getPlaces() == null || day.getPlaces().size() < 2) continue;
+
+            List<TourCourseAiResponseDto.PlaceVisit> ordered = day.getPlaces().stream()
+                    .sorted(Comparator.comparingInt(TourCourseAiResponseDto.PlaceVisit::getSeq))
+                    .collect(Collectors.toList());
+
+            for (int i = 0; i < ordered.size() - 1; i++) {
+                PoiSummary from = coordMap.get(ordered.get(i).getContentId());
+                PoiSummary to = coordMap.get(ordered.get(i + 1).getContentId());
+                if (from == null || to == null || from.mapx() == null || from.mapy() == null
+                        || to.mapx() == null || to.mapy() == null) {
+                    continue;
+                }
+
+                double distKm = haversineKm(from.mapy().doubleValue(), from.mapx().doubleValue(),
+                        to.mapy().doubleValue(), to.mapx().doubleValue());
+                if (distKm > maxLegKm) {
+                    log.warn("이동거리 초과: {} -> {} ({}km > {}km, transport={})",
+                            ordered.get(i).getContentId(), ordered.get(i + 1).getContentId(), distKm, maxLegKm, transport);
+                    throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                            String.format("AI가 생성한 일정의 이동거리가 %s 기준(약 2시간)을 초과했습니다", transport), true);
+                }
+            }
+        }
     }
 
     private TourCourseUserDefined saveTourCourse(TourCourseGenerateRequestDto request,

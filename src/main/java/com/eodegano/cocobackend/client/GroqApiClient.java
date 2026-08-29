@@ -75,7 +75,8 @@ public class GroqApiClient {
         String dailyScheduleTemplate = loadPromptTemplate("prompts/daily-schedule-template.txt");
 
         return systemPromptTemplate + "\n\n" +
-               "AVAILABLE PLACES DATA:\n" + placesData + "\n\n" +
+               "AVAILABLE PLACES DATA (id=contentId, t=type, n=name, g=geo-group; see RULE 3):\n" +
+               placesData + "\n\n" +
                dailyScheduleTemplate;
     }
 
