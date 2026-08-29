@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-08-29
+
+### Fixed
+
+#### AI 코스 생성 — 마지막 날(체크아웃일)에 숙소가 포함되는 문제 수정
+
+`tour_course_user_defined` 데이터를 확인해보니 다수의 코스에서 여행 마지막 날(귀가일)
+마지막 일정으로 `ACCOMMODATION`이 들어가 있었음(id=85 등). 코드에는 이를 막는 검증이
+전혀 없었고, 전적으로 프롬프트 지시(`system-prompt.txt` RULE 4 "Include ACCOMMODATION
+at the end of each day (multi-day trips only)")에만 의존하는 구조였는데, 이 문구가
+"multi-day trip이면 매일 끝에 숙소"로 읽혀 마지막 날도 예외 없이 포함 대상이 됐던 것.
+같은 날 생성된 코스끼리도 결과가 들쭉날쭉했던 걸로 보아 온도 0.7의 소형 모델이 규칙을
+문자 그대로 따르는 경우와 상식적으로 마지막 날을 제외하는 경우가 뒤섞여 비결정적으로
+발생한 문제였음.
+
+- `system-prompt.txt` RULE 4에 "마지막 날은 체크아웃/귀가일이므로 ACCOMMODATION 제외"를
+  명시적으로 추가
+- `daily-schedule-template.txt`의 Night 항목·"End multi-day trips with accommodation"
+  문구를 마지막 날 예외로 수정(마지막 날은 단일 여행처럼 저녁 식사로 마무리)
+- 프롬프트만으로는 소형 모델이 규칙을 어길 수 있어, `TourCourseServiceImpl.validateAiResponse()`에
+  사후 검증(`validateNoAccommodationOnLastDay()`) 추가 — 마지막 날 스케줄에 `ACCOMMODATION`이
+  있으면 기존 이동거리 검증(v0.6.8)과 동일하게 `AiCourseGenerationException
+  (RESPONSE_VALIDATION_FAILED, retryable=true)`로 실패시켜 프론트가 재시도하도록 함(신규
+  인프라 없이 기존 499 처리 경로 재사용)
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/main/resources/prompts/system-prompt.txt`
+- `src/main/resources/prompts/daily-schedule-template.txt`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
 ## [0.6.8] - 2026-08-29
 
 ### Added

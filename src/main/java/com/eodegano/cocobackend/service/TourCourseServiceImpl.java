@@ -723,7 +723,28 @@ public class TourCourseServiceImpl implements TourCourseService {
             validateTravelDistances(aiResponse, transport);
         }
 
+        validateNoAccommodationOnLastDay(aiResponse, endDate);
+
         log.info("AI response validation successful");
+    }
+
+    /**
+     * 마지막 날(체크아웃일)은 숙박 없이 귀가하는 날이므로 ACCOMMODATION이 있으면 안 된다.
+     * 프롬프트(RULE 4)로만 지시할 경우 소형 모델이 "multi-day trip은 매일 끝에 숙소"라는
+     * 규칙을 문자 그대로 적용해 마지막 날에도 숙소를 넣는 사례가 관측되어 사후 검증으로 차단한다.
+     */
+    private void validateNoAccommodationOnLastDay(TourCourseAiResponseDto aiResponse, LocalDate endDate) {
+        for (TourCourseAiResponseDto.DailyPlan day : aiResponse.getSchedule()) {
+            if (!endDate.equals(day.getDate()) || day.getPlaces() == null) continue;
+
+            boolean hasAccommodation = day.getPlaces().stream()
+                    .anyMatch(p -> PlaceType.ACCOMMODATION.name().equals(p.getType()));
+            if (hasAccommodation) {
+                log.warn("마지막 날({})에 ACCOMMODATION이 포함되어 있습니다", endDate);
+                throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                        "AI가 마지막 날(체크아웃일)에 숙소를 포함해 일정을 생성했습니다", true);
+            }
+        }
     }
 
     /**
