@@ -50,12 +50,18 @@ sudo /home/ubuntu/cocobackend/switch-active.sh 8080   # 최초 업스트림을 b
 
 ## 5. nginx 사이트 설정
 
+먼저 `nginx.conf`가 어느 디렉토리를 읽는지 확인한다:
+
 ```bash
-sudo cp deploy/nginx-cocobackend.conf /etc/nginx/sites-available/cocobackend
-sudo ln -s /etc/nginx/sites-available/cocobackend /etc/nginx/sites-enabled/cocobackend
-sudo rm -f /etc/nginx/sites-enabled/default   # 기본 welcome 페이지 제거(있는 경우)
+grep -n include /etc/nginx/nginx.conf
+```
+
+`include /etc/nginx/sites-enabled/*;`가 있으면 (Debian/Ubuntu 계열 기본 nginx) sites-available/sites-enabled 방식을 써도 되지만, **없고 `include /etc/nginx/conf.d/*.conf;`만 있다면(nginx.org 계열 등) conf.d에 직접 설치해야 한다** — 실제로 이 방식이 확인 없이도 항상 동작하므로 아래 conf.d 방식을 기본으로 쓴다:
+
+```bash
+sudo cp deploy/nginx-cocobackend.conf /etc/nginx/conf.d/cocobackend.conf
 sudo nginx -t
-sudo systemctl restart nginx
+sudo systemctl reload nginx
 ```
 
 `curl http://<서버IP>/actuator/health`로 nginx 경유 응답이 오는지 확인.
