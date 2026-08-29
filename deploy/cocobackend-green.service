@@ -1,0 +1,23 @@
+# Blue/Green 배포 — green 슬롯 systemd 유닛 템플릿
+# 서버에서: sudo cp deploy/cocobackend-green.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable cocobackend-green
+# User/WorkingDirectory 경로는 실제 배포 계정에 맞게 수정하세요.
+# 최초 1회 설정 절차 전체는 deploy/BLUEGREEN_SETUP.md 참고.
+
+[Unit]
+Description=cocoBackend Spring Boot Application (green)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/cocobackend-green
+EnvironmentFile=/home/ubuntu/cocobackend/.env
+Environment=SERVER_PORT=8081
+ExecStart=/usr/bin/java -Xmx400m -Xss512k -jar /home/ubuntu/cocobackend-green/app.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

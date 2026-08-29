@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-08-29
+
+### Added
+
+#### 무중단 배포(Blue/Green) 전환 — INF7/BOQ16
+
+기존 배포(`.github/workflows/deploy.yml`)는 `systemctl restart cocobackend` 단일 호출이라
+재시작 중 짧은 다운타임이 발생했음(INF7 TODO). Docker/K8s 없이 지금의 systemd 직접
+배포 방식을 유지하면서, systemd blue/green 유닛 2개(8080/8081) + nginx 리버스 프록시
+조합으로 무중단 전환.
+
+- `deploy/cocobackend-blue.service` / `deploy/cocobackend-green.service` 신규 —
+  기존 `deploy/cocobackend.service`(단일 인스턴스)를 대체. 두 유닛 모두 공유
+  `/home/ubuntu/cocobackend/.env`를 `EnvironmentFile`로 참조하고, 포트만
+  `Environment=SERVER_PORT`로 분리
+- `deploy/nginx-cocobackend.conf` 신규 — `/etc/nginx/conf.d/cocobackend_upstream.conf`가
+  가리키는 활성 포트로만 프록시하는 사이트 설정
+- `deploy/switch-active.sh` 신규 — 지정한 포트로 nginx 업스트림을 갱신하고
+  `nginx -t && systemctl reload nginx` 실행 (CI가 sudo NOPASSWD로 호출하는 유일한 진입점)
+- `.github/workflows/deploy.yml`의 마지막 스텝을 `Restart service`(단일 재시작)에서
+  `Blue/Green switch`로 교체 — `active_color` 상태 파일로 비활성 슬롯 판별 → jar 배포 →
+  재시작 → 기존 `spring-boot-starter-actuator`의 `/actuator/health`(permitAll, 코드
+  변경 없음) 헬스체크(최대 60초 재시도) → 통과 시 `switch-active.sh`로 nginx 전환 →
+  `active_color` 갱신 → 이전 슬롯 `systemctl stop`. 헬스체크 실패 시 배포만 실패
+  처리하고 기존 활성 슬롯은 그대로 유지(자동 롤백 효과)
+- `deploy/BLUEGREEN_SETUP.md` 신규 — 서버 최초 1회 설정(nginx 설치, 디렉토리·상태
+  파일 준비, systemd 유닛 등록, `switch-active.sh` 배치, nginx 사이트 활성화, sudoers
+  NOPASSWD 등록) 및 수동 롤백 절차 runbook. 이 세션에서는 서버에 직접 접속하지 않기로
+  확정해 레포 측 파일만 준비 — 서버 적용은 runbook을 보고 별도로 진행 필요
+
+### Files Changed
+
+- `.github/workflows/deploy.yml`
+- `deploy/cocobackend-blue.service` (신규)
+- `deploy/cocobackend-green.service` (신규)
+- `deploy/cocobackend.service` (삭제, blue/green 유닛으로 대체)
+- `deploy/nginx-cocobackend.conf` (신규)
+- `deploy/switch-active.sh` (신규)
+- `deploy/BLUEGREEN_SETUP.md` (신규)
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+
 ## [0.6.9] - 2026-08-29
 
 ### Fixed
