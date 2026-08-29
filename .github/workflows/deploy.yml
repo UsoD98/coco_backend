@@ -93,12 +93,12 @@ jobs:
             sudo systemctl restart cocobackend-$INACTIVE
 
             HEALTHY=0
-            for i in $(seq 1 30); do
+            for i in $(seq 1 60); do
               if curl -sf "http://127.0.0.1:$INACTIVE_PORT/actuator/health" | grep -q '"status":"UP"'; then
                 HEALTHY=1
                 break
               fi
-              sleep 2
+              sleep 3
             done
 
             if [ "$HEALTHY" -ne 1 ]; then
