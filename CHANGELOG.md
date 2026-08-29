@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-08-29
+
+### Added
+
+#### AI 코스 생성 응답에 기본 제목(title) 추가
+
+`generateTourCourse` 응답에는 `courseId`만 있고 제목이 없어, 프론트에서 별도로 제목을
+붙여줘야 했음. 요청에 이미 `sigunguCodes`가 들어오므로 이를 기반으로 기본 제목을
+서버에서 생성해 저장하고 응답에도 실어주기로 함.
+
+시군구 코드→이름 매핑은 이미 `mst_sigungu` 테이블(`MstSigungu` 엔티티)에 시드되어
+있었으나(`docs/CLAUDE.md`에 "레포지토리·서비스 미연결" 상태로 명시) 연결되어 있지 않던
+상태였음. 동일 데이터를 enum으로 새로 하드코딩하면 DB와 코드 두 곳에서 관리해야 하므로,
+대신 리포지토리를 새로 뚫어 기존 테이블을 그대로 활용함.
+
+- `MstSigunguRepository` 신규 추가 — `mst_sigungu` 조회용
+- `TourCourseServiceImpl.buildDefaultTitle()` 추가 — `sigunguCodes`를 시군구명으로
+  변환해 기본 제목 생성 (코드 없음 → "여행 코스", 1개 → "{시군구명} 여행 코스", 2개
+  이상 → "{첫 시군구명} 외 N곳 여행 코스")
+- 코스 저장(`saveTourCourse`) 시 위 제목을 `title` 컬럼에 저장 (기존
+  `updateCourseTitle` API로 사용자가 이후 변경 가능한 점은 유지)
+- `TourCourseGenerateResponseDto`에 `title` 필드 추가, `generateTourCourse` 응답에 포함
+
+### Files Changed (4 files)
+
+- `src/main/java/com/eodegano/cocobackend/repository/MstSigunguRepository.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseGenerateResponseDto.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
 ## [0.6.10] - 2026-08-29
 
 ### Added

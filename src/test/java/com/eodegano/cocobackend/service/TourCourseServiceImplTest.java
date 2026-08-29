@@ -1,6 +1,7 @@
 package com.eodegano.cocobackend.service;
 
 import com.eodegano.cocobackend.client.GroqApiClient;
+import com.eodegano.cocobackend.domain.MstSigungu;
 import com.eodegano.cocobackend.domain.TourCourseUserDefined;
 import com.eodegano.cocobackend.domain.TourCourseUserDefinedDetail;
 import com.eodegano.cocobackend.domain.User;
@@ -11,6 +12,7 @@ import com.eodegano.cocobackend.dto.TourCourseGenerateResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseUpdateRequestDto;
 import com.eodegano.cocobackend.exception.AiCourseGenerationException;
+import com.eodegano.cocobackend.repository.MstSigunguRepository;
 import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedDetailRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedRepository;
@@ -48,6 +50,7 @@ class TourCourseServiceImplTest {
     @Mock private GroqApiClient groqApiClient;
     @Mock private TourLiveDataService tourLiveDataService;
     @Mock private PoiRatingRepository poiRatingRepository;
+    @Mock private MstSigunguRepository mstSigunguRepository;
     @Mock private TourCourseUserDefinedRepository tourCourseUserDefinedRepository;
     @Mock private TourCourseUserDefinedDetailRepository tourCourseUserDefinedDetailRepository;
     @Mock private UserRepository userRepository;
@@ -64,7 +67,7 @@ class TourCourseServiceImplTest {
     void setUp() {
         // ObjectMapper는 Jackson 3.x(tools.jackson) 실 인스턴스를 사용 — theme JSON 파싱만 사용되므로 목 불필요
         tourCourseService = new TourCourseServiceImpl(
-                groqApiClient, tourLiveDataService, poiRatingRepository,
+                groqApiClient, tourLiveDataService, poiRatingRepository, mstSigunguRepository,
                 tourCourseUserDefinedRepository, tourCourseUserDefinedDetailRepository,
                 userRepository, new ObjectMapper());
     }
@@ -276,6 +279,26 @@ class TourCourseServiceImplTest {
         assertThat(place.getThumbnailImg()).isEqualTo("http://img.jpg");
         assertThat(place.getOperatingHours()).isEqualTo("상시 개방");
         assertThat(place.getCost()).isEqualTo(5000);
+        assertThat(result.getTitle()).isEqualTo("경주 힐링 코스");
+    }
+
+    @Test
+    @DisplayName("성공 - sigunguCodes를 시군구명으로 변환해 기본 제목을 생성하고 저장함")
+    void generateTourCourseBuildsDefaultTitleFromSigunguCodes() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(aiResponse(START_DATE));
+        given(mstSigunguRepository.findAllById(List.of("47130")))
+                .willReturn(List.of(MstSigungu.builder().sigunguCode("47130").sigunguName("경주시").build()));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        tourCourseService.generateTourCourse(validGenerateRequest(), null);
+
+        ArgumentCaptor<TourCourseUserDefined> savedCaptor = ArgumentCaptor.forClass(TourCourseUserDefined.class);
+        verify(tourCourseUserDefinedRepository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().getTitle()).isEqualTo("경주시 여행 코스");
     }
 
     @Test

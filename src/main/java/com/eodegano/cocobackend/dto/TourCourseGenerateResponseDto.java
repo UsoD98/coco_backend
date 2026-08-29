@@ -16,6 +16,7 @@ import java.util.List;
 public class TourCourseGenerateResponseDto {
 
     private Long courseId;
+    private String title;
     private List<DailySchedule> schedule;
 
     @Getter
