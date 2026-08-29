@@ -186,7 +186,7 @@
 - **가치**: 모든 POI·예산·코스 기능의 데이터 원천 (배치 대신 요청 시점 실시간 원천으로 전환).
 
 ### PO2. 큐레이션 POI 목록 조회
-- **설명**: 지역(sigunguCode)·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리. **v0.6.4**: 각 아이템에 로그인 사용자의 좋아요 여부(`liked`, boolean) 추가 — 비로그인/탈퇴 사용자는 항상 `false`. **2026-08-22 스코프 확정**: `peopleCount`(인원 버킷 필터, BU2)·`theme`(테마 필터, BOQ14) 둘 다 구현하지 않기로 확정 — 아래 참고.
+- **설명**: 지역(sigunguCode)·콘텐츠 유형 파라미터로 필터링된 POI 목록 반환. 응답에 `mapx`/`mapy` 좌표, 썸네일 포함. **v0.5.0**: 데이터 소스가 TourAPI 라이브 호출(PO1, 캐시 경유)로 변경 — 필터링·정렬은 애플리케이션 메모리에서 처리. **v0.6.4**: 각 아이템에 로그인 사용자의 좋아요 여부(`liked`, boolean) 추가 — 비로그인/탈퇴 사용자는 항상 `false`. **2026-08-22 스코프 확정**: `peopleCount`(인원 버킷 필터, BU2)·`theme`(테마 필터, BOQ14) 둘 다 구현하지 않기로 확정 — 아래 참고. **v0.6.7**: 각 아이템에 `poi_rating.stars` 기반 별점(`stars`, BigDecimal, nullable) 추가 — 미입력 POI는 `null`.
 - **상태**: TourAPI가 데이터 없는 시군구 응답 → 빈 배열 + `available: false` 플래그 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`GET /api/v1/poi` — `sigunguCode`(필수)·`contentTypeId`(선택) 필터로 최종 스코프 확정. `peopleCount`는 필수 파라미터로만 받고 필터링에는 미사용(BU2 스코프 아웃, 2026-08-08), `theme`은 파라미터 자체 미수신(BOQ14, 2026-08-22 구현 안 하기로 확정 — 이전엔 "설계 확정 후 추가 예정" TODO였으나 착수하지 않기로 결정), `avgPrice`는 BU1 취소로 항상 `null` 반환. 셋 다 재검토 예정 없음)
@@ -194,7 +194,7 @@
 - **가치**: 지역·유형 기반 큐레이션의 핵심 응답.
 
 ### PO3. POI 상세 통합 조회
-- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유). **v0.6.4**: 로그인 사용자의 좋아요 여부(`liked`, boolean)와 `poi_rating.likes` 기반 총 좋아요 수(`totalLiked`, int) 추가.
+- **설명**: `contentId` 기반으로 공통 상세(설명·이미지)·유형별 반복정보(요금·시설 등)를 통합해 단일 응답으로 반환. **v0.5.0**: `DetailCommon`/`DetailInfo`/`Attraction`/`Food`/`Accommodation` 등 로컬 엔티티 조인 대신, `TourApiClient.detailCommon2`/`detailInfo2` 라이브 호출을 조합해 응답 구성 (`TourLiveDataService.getFullDetail()`, 신규 `poiFullDetail` 캐시 TTL 6h 경유). **v0.6.4**: 로그인 사용자의 좋아요 여부(`liked`, boolean)와 `poi_rating.likes` 기반 총 좋아요 수(`totalLiked`, int) 추가. **v0.6.7**: `poi_rating.stars` 기반 별점(`stars`, BigDecimal, nullable) 추가 — 미입력 POI는 `null`.
 - **상태**: TourAPI에 존재하지 않는 contentId → 404 / 성공 → 200.
 - **MVP**: ✅
 - **구현 상태**: ✅ (`GET /api/v1/poi/{contentId}`, 인증 불필요) — `avgPrice`는 BU1 취소로 항상 `null` 반환 (PO2와 동일)
@@ -363,8 +363,8 @@
   - `stars`: 네이버·다이닝코드·구글 평점 웹 검색 기반으로 285개 POI 일괄 입력 완료 (2026-06-27, 당시 `tour.stars`). v0.5.0 DB 마이그레이션 시 `poi_rating`으로 이관 완료(2026-08-08). 여행코스(contenttypeid=25) 15개는 별점 대상 제외(null 유지).
 - **MVP**: 🔜 (CO6 알고리즘 추천 구현 전 선결 조건)
 - **구현 상태**: ✅ (`likes` 수집 파이프라인 완료 / `stars` 285개 초기값 `poi_rating`으로 이관 완료)
-- **FE 의존**: PO5 좋아요 버튼 (likes 수집 연결됨).
-- **가치**: CO6 별점·추천수 기반 알고리즘 추천의 핵심 원천 데이터.
+- **FE 의존**: PO5 좋아요 버튼 (likes 수집 연결됨) / **v0.6.7부터** PO2·PO3 응답의 `stars` 필드로 화면에 직접 노출됨.
+- **가치**: CO6 별점·추천수 기반 알고리즘 추천의 핵심 원천 데이터. v0.6.7부터는 PO2/PO3 응답에도 노출되어 사용자에게 직접 보여지는 표시용 데이터를 겸함.
 
 ### DA5. TourAPI 응답 캐싱 (Caffeine) — **신규 (v0.5.0)**
 - **설명**: 로컬 DB 미저장 원칙에 따라 매 요청 TourAPI 라이브 호출이 되면서 발생하는 응답 지연·호출한도 소진 리스크를 완화하기 위한 인프로세스 캐시 계층. 캐시 2종, 둘 다 TTL 6시간:

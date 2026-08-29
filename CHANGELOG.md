@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-08-29
+
+### Added
+
+#### POI 목록/상세 조회 응답에 별점(stars) 추가
+
+`totalLiked`(`poi_rating.likes`)와 동일한 방식으로 `poi_rating.stars`도 프론트에 노출.
+
+- `GET /api/v1/poi`(PO2)·`GET /api/v1/poi/{contentId}`(PO3) 둘 다 `stars`(BigDecimal, nullable) 필드 추가
+- `poi_rating` 행이 없거나 `stars`가 아직 입력되지 않은 POI는 `null` 반환 (에러 아님, 안전 처리)
+- 목록 조회는 `PoiRatingRepository.findByContentidIn()` 벌크 조회로 N+1 없이 한 번에 평점 Map을 구성 (liked 조회와 동일 패턴)
+- 상세 조회는 기존에 `totalLiked`만을 위해 호출하던 `poiRatingRepository.findById()` 결과를 재사용해 `stars`까지 추출 (쿼리 중복 없음)
+
+### Files Changed (7 files)
+
+- `src/main/java/com/eodegano/cocobackend/dto/PoiCurationItemDto.java`
+- `src/main/java/com/eodegano/cocobackend/dto/PoiDetailResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiCurationServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiDetailServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/controller/PoiControllerTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiCurationServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiDetailServiceImplTest.java`
+
 ## [0.6.6] - 2026-08-22
 
 ### Changed
