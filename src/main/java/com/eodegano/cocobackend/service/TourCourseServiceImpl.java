@@ -1,6 +1,7 @@
 package com.eodegano.cocobackend.service;
 
 import com.eodegano.cocobackend.client.GroqApiClient;
+import com.eodegano.cocobackend.domain.MstSigungu;
 import com.eodegano.cocobackend.domain.PoiRating;
 import com.eodegano.cocobackend.domain.TourCourseUserDefined;
 import com.eodegano.cocobackend.domain.TourCourseUserDefinedDetail;
@@ -15,6 +16,7 @@ import com.eodegano.cocobackend.dto.TourCourseShareResponseDto;
 import com.eodegano.cocobackend.dto.TourCourseUpdateRequestDto;
 import com.eodegano.cocobackend.exception.AiCourseGenerationException;
 import com.eodegano.cocobackend.exception.AiCourseGenerationException.ErrorCode;
+import com.eodegano.cocobackend.repository.MstSigunguRepository;
 import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedDetailRepository;
 import com.eodegano.cocobackend.repository.TourCourseUserDefinedRepository;
@@ -75,6 +77,7 @@ public class TourCourseServiceImpl implements TourCourseService {
     private final GroqApiClient groqApiClient;
     private final TourLiveDataService tourLiveDataService;
     private final PoiRatingRepository poiRatingRepository;
+    private final MstSigunguRepository mstSigunguRepository;
     private final TourCourseUserDefinedRepository tourCourseUserDefinedRepository;
     private final TourCourseUserDefinedDetailRepository tourCourseUserDefinedDetailRepository;
     private final UserRepository userRepository;
@@ -96,7 +99,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         TourCourseAiResponseDto aiResponse = groqApiClient.generateTourCourse(placesData, userRequest);
         validateAiResponse(aiResponse, request.getStartDate(), request.getEndDate(), request.getTransport());
         TourCourseUserDefined savedCourse = saveTourCourse(request, userId, aiResponse);
-        return buildGenerateResponse(savedCourse.getId(), aiResponse);
+        return buildGenerateResponse(savedCourse.getId(), savedCourse.getTitle(), aiResponse);
     }
 
     @Override
@@ -263,7 +266,7 @@ public class TourCourseServiceImpl implements TourCourseService {
 
     // ── 코스 응답 빌더 ─────────────────────────────────────────────────────────
 
-    private TourCourseGenerateResponseDto buildGenerateResponse(Long courseId, TourCourseAiResponseDto aiResponse) {
+    private TourCourseGenerateResponseDto buildGenerateResponse(Long courseId, String title, TourCourseAiResponseDto aiResponse) {
         List<Long> allContentIds = aiResponse.getSchedule().stream()
                 .flatMap(day -> day.getPlaces().stream())
                 .map(TourCourseAiResponseDto.PlaceVisit::getContentId)
@@ -299,6 +302,7 @@ public class TourCourseServiceImpl implements TourCourseService {
 
         return TourCourseGenerateResponseDto.builder()
                 .courseId(courseId)
+                .title(title)
                 .schedule(schedules)
                 .build();
     }
@@ -419,6 +423,29 @@ public class TourCourseServiceImpl implements TourCourseService {
         Integer liveCost = detail != null ? detail.cost() : null;
         if (liveCost != null) return liveCost;
         return DEFAULT_COST_BY_TYPE.get(type);
+    }
+
+    /** sigunguCodes 기반 기본 제목 생성. 예: "영덕군 여행 코스", "영덕군 외 2곳 여행 코스" */
+    private String buildDefaultTitle(List<String> sigunguCodes) {
+        if (sigunguCodes == null || sigunguCodes.isEmpty()) {
+            return "여행 코스";
+        }
+
+        Map<String, String> nameByCode = mstSigunguRepository.findAllById(sigunguCodes).stream()
+                .collect(Collectors.toMap(MstSigungu::getSigunguCode, MstSigungu::getSigunguName));
+
+        List<String> names = sigunguCodes.stream()
+                .map(nameByCode::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        if (names.isEmpty()) {
+            return "여행 코스";
+        }
+        if (names.size() == 1) {
+            return names.get(0) + " 여행 코스";
+        }
+        return names.get(0) + " 외 " + (names.size() - 1) + "곳 여행 코스";
     }
 
     // ── 유틸 ──────────────────────────────────────────────────────────────────
@@ -797,6 +824,7 @@ public class TourCourseServiceImpl implements TourCourseService {
                     .startDate(request.getStartDate())
                     .endDate(request.getEndDate())
                     .transport(request.getTransport().name())
+                    .title(buildDefaultTitle(request.getSigunguCodes()))
                     .theme(themeJson)
                     .build();
 
