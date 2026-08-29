@@ -1,7 +1,9 @@
 package com.eodegano.cocobackend.service;
 
+import com.eodegano.cocobackend.domain.PoiRating;
 import com.eodegano.cocobackend.dto.PoiCurationItemDto;
 import com.eodegano.cocobackend.dto.PoiCurationResponseDto;
+import com.eodegano.cocobackend.repository.PoiRatingRepository;
 import com.eodegano.cocobackend.repository.UserPoiLikeRepository;
 import com.eodegano.cocobackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -22,6 +25,7 @@ public class PoiCurationServiceImpl implements PoiCurationService {
     private final TourLiveDataService tourLiveDataService;
     private final UserRepository userRepository;
     private final UserPoiLikeRepository userPoiLikeRepository;
+    private final PoiRatingRepository poiRatingRepository;
 
     @Override
     public PoiCurationResponseDto getPoiList(String sigunguCode, Integer peopleCount, Integer contentTypeId, String userEmail) {
@@ -46,10 +50,12 @@ public class PoiCurationServiceImpl implements PoiCurationService {
                     .build();
         }
 
-        Set<Long> likedContentIds = resolveLikedContentIds(userEmail, filtered.stream().map(PoiSummary::contentId).toList());
+        List<Long> filteredContentIds = filtered.stream().map(PoiSummary::contentId).toList();
+        Set<Long> likedContentIds = resolveLikedContentIds(userEmail, filteredContentIds);
+        Map<Long, PoiRating> ratingsByContentId = resolveRatings(filteredContentIds);
 
         List<PoiCurationItemDto> items = filtered.stream()
-                .map(p -> toItemDto(p, likedContentIds))
+                .map(p -> toItemDto(p, likedContentIds, ratingsByContentId))
                 .collect(Collectors.toList());
 
         return PoiCurationResponseDto.builder()
@@ -68,7 +74,17 @@ public class PoiCurationServiceImpl implements PoiCurationService {
                 .orElseGet(Set::of);
     }
 
-    private PoiCurationItemDto toItemDto(PoiSummary p, Set<Long> likedContentIds) {
+    /** 조회 대상이 없으면 빈 Map — stars=null로 안전 처리 */
+    private Map<Long, PoiRating> resolveRatings(List<Long> contentIds) {
+        if (contentIds.isEmpty()) {
+            return Map.of();
+        }
+        return poiRatingRepository.findByContentidIn(contentIds).stream()
+                .collect(Collectors.toMap(PoiRating::getContentid, rating -> rating));
+    }
+
+    private PoiCurationItemDto toItemDto(PoiSummary p, Set<Long> likedContentIds, Map<Long, PoiRating> ratingsByContentId) {
+        PoiRating rating = ratingsByContentId.get(p.contentId());
         return PoiCurationItemDto.builder()
                 .contentId(p.contentId())
                 .contentTypeId(p.contentTypeId())
@@ -78,6 +94,7 @@ public class PoiCurationServiceImpl implements PoiCurationService {
                 .thumbnail(p.firstimage())
                 .avgPrice(null) // TODO(BOQ14): food_avg_price 근거 테이블 소실 — 데이터 소스 확정 전까지 항상 null. docs/PRD_BACK.md BOQ14 참고
                 .liked(likedContentIds.contains(p.contentId()))
+                .stars(rating == null ? null : rating.getStars())
                 .build();
     }
 

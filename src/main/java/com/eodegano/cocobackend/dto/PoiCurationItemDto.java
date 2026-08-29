@@ -16,4 +16,5 @@ public class PoiCurationItemDto {
     private String thumbnail;
     private Integer avgPrice;
     private boolean liked;
+    private BigDecimal stars;
 }

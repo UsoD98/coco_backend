@@ -9,7 +9,9 @@ import com.eodegano.cocobackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /** GBC018 POI 상세 통합 조회 (GET /api/v1/poi/{contentId}) */
 @Service
@@ -28,8 +30,10 @@ public class PoiDetailServiceImpl implements PoiDetailService {
             throw new NoSuchElementException("존재하지 않는 POI입니다");
         }
         boolean liked = resolveLiked(contentId, userEmail);
-        int totalLiked = poiRatingRepository.findById(contentId).map(PoiRating::getLikesOrZero).orElse(0);
-        return toDto(detail, liked, totalLiked);
+        Optional<PoiRating> rating = poiRatingRepository.findById(contentId);
+        int totalLiked = rating.map(PoiRating::getLikesOrZero).orElse(0);
+        BigDecimal stars = rating.map(PoiRating::getStars).orElse(null);
+        return toDto(detail, liked, totalLiked, stars);
     }
 
     /** 로그인 사용자가 없으면(비로그인·탈퇴 등) false — 공개 조회 API이므로 예외를 던지지 않고 안전하게 처리 */
@@ -42,7 +46,7 @@ public class PoiDetailServiceImpl implements PoiDetailService {
                 .orElse(false);
     }
 
-    private PoiDetailResponseDto toDto(PoiFullDetail d, boolean liked, int totalLiked) {
+    private PoiDetailResponseDto toDto(PoiFullDetail d, boolean liked, int totalLiked, BigDecimal stars) {
         return PoiDetailResponseDto.builder()
                 .contentId(d.contentId())
                 .contentTypeId(d.contentTypeId())
@@ -65,6 +69,7 @@ public class PoiDetailServiceImpl implements PoiDetailService {
                         .toList())
                 .liked(liked)
                 .totalLiked(totalLiked)
+                .stars(stars)
                 .build();
     }
 }
