@@ -37,6 +37,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   NOPASSWD 등록) 및 수동 롤백 절차 runbook. 이 세션에서는 서버에 직접 접속하지 않기로
   확정해 레포 측 파일만 준비 — 서버 적용은 runbook을 보고 별도로 진행 필요
 
+### Fixed
+
+#### nginx 사이트 설치 경로(conf.d) 및 헬스체크 타임아웃 — 실서버 적용 중 발견
+
+서버 최초 1회 설정을 실제로 적용하는 과정에서 문서상 가정과 다른 부분 2가지가 발견되어 수정:
+
+- **nginx 사이트 설정 경로**: 문서는 `sites-available`/`sites-enabled` 관례를 전제했으나,
+  실제 서버(nginx 1.30.4, `apt install nginx`)의 `nginx.conf`는 `include
+  /etc/nginx/conf.d/*.conf;`만 있고 `sites-enabled`는 include하지 않아 사이트 설정이
+  전혀 적용되지 않았음. `deploy/nginx-cocobackend.conf`를 `conf.d/cocobackend.conf`로
+  직접 설치하는 방식으로 통일하고, `BLUEGREEN_SETUP.md`에 사전에 `nginx.conf`의
+  include 설정을 확인하는 절차 추가
+- **헬스체크 타임아웃**: 최초 배포 시도에서 green 인스턴스가 60초(30회×2초) 안에
+  기동을 못 마쳐 헬스체크 타임아웃으로 배포 실패(기존 활성 슬롯은 영향 없이 유지 —
+  롤백 설계는 의도대로 동작). 실제 로그 확인 결과 `Started CocoBackendApplication`까지
+  약 76초(서비스 시작 기준 약 82초) 소요 — blue+green 동시 기동 시 메모리 압박(swap
+  발생 확인)으로 평소보다 느려진 것으로 추정. 헬스체크 대기를 180초(60회×3초)로 확대
+
 ### Files Changed
 
 - `.github/workflows/deploy.yml`
