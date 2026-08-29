@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-08-29
+
+### Added
+
+#### AI 코스 생성 — 이동거리(2시간 이내) 지리적 클러스터링 및 사후 검증 추가
+
+AI(Groq gpt-oss-20b)가 생성한 코스에서 같은 날 연속 방문지 간 실제 이동거리가 2~3시간을
+넘는 문제 수정. 원인은 AI에게 넘기는 후보 데이터(`id`/`t`/`n`)에 좌표가 아예 없어서, 무료
+소형 모델이 좌표 없이 "가까움"을 이름만으로 추측하고 있었던 것 — 프롬프트 문구("CAR 2-3시간
+이내")만으로는 근본적으로 지켜질 수 없는 구조였음.
+
+- `TourCourseServiceImpl`에 Haversine 거리 기반 지리적 클러스터링 추가. 이동수단별로 실효
+  평균속도를 가정해 클러스터 반경을 다르게 설정(CAR: 반경 60km/최대 leg 120km ≈ 2시간
+  @60km/h, PUBLIC_TRANSPORT: 반경 25km/최대 leg 50km ≈ 2시간 @25km/h). WALK는 범위가
+  애매해 이번 스코프에서 제외(기존 동작 유지, 클러스터링 미적용)
+- AI에게는 원본 좌표 대신 클러스터 그룹 번호(`g` 필드, 정수 1~2자)만 전달 — 소형 모델에게
+  거리 계산 대신 "같은 g값끼리 묶기"만 시켜 토큰도 아끼고(원본 좌표 대비 POI당 토큰 절감)
+  안정성도 높임 (`prompts/system-prompt.txt`, `prompts/daily-schedule-template.txt` 갱신)
+- AI 응답 수신 후 실제 mapx/mapy로 같은 날 연속 방문지 간 거리를 재검증하는 안전장치
+  추가(`validateTravelDistances()`) — 클러스터링에도 불구하고 AI가 그룹을 무시하고 배치한
+  경우, 이동수단별 한계 초과 시 기존 `AiCourseGenerationException(RESPONSE_VALIDATION_FAILED,
+  retryable=true)` 흐름으로 실패시켜 프론트가 재시도하도록 함(신규 인프라 없이 기존 499 처리
+  경로 재사용)
+- 숙소 인원수 기반 필터링(TourAPI `detailInfo2` 객실 정원 연동)은 검토 결과 별도 API 연동이
+  필요한 작업이라 v2로 유예 — CO6(별점·추천수 기반 알고리즘 코스 추천) v2/v3 고도화 로드맵과 일관
+
+### Files Changed (5 files)
+
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/main/resources/prompts/system-prompt.txt`
+- `src/main/resources/prompts/daily-schedule-template.txt`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
 ## [0.6.7] - 2026-08-29
 
 ### Added
