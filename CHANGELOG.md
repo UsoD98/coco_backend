@@ -22,7 +22,8 @@ FE(Netlify, `gbcoco.netlify.app`)가 CORS 회피를 위해 자체 프록시로 �
 
 - `log_format cocobackend_named` 신규 — `time`/`remote_addr`/`client_ip`(XFF)/`method`/
   `uri`/`status`/`request_time`/`upstream_time`/`referer`/`user_agent`를 `key=value` 형태로
-  라벨링해 가독성 확보
+  라벨링해 가독성 확보 (`client_ip` 값은 `"IP, IP"` 형태로 쉼표+공백을 포함하므로 다른
+  값과 마찬가지로 따옴표로 감쌈 — 공백 기준 파싱이 깨지지 않도록)
 - 사이트 전용 `access_log /var/log/nginx/cocobackend-access.log`로 분리 (기존 기본
   access_log는 그대로 유지)
 - 스프링부트 앱 레벨의 IP 로깅(인증 유저-IP 연계)은 이번 범위에서 제외 — 지금은 nginx
