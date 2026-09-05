@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-05
+
+### Docs
+
+#### 코스 생성 방향 영구 확정 — CO6(순수 알고리즘) 로드맵 취소, PRD.md 백엔드 섹션 동기화
+
+Groq AI 기반 코스 생성(CO1)을 영구 핵심 방식으로 유지하기로 확정하고, "Groq 완전
+제거"를 목표로 하던 CO6(순수 알고리즘 코스 추천) 로드맵을 v2+ 고도화 대상이 아니라
+취소로 재작성함. Groq 완전 실패 시 대비한 Degraded Fallback 안전망은 설계만 남기고
+착수는 보류(BOQ18 신규).
+
+오랫동안 갱신되지 않았던 최상위 통합 문서 `docs/PRD.md`의 백엔드 관련 섹션(한 줄
+정의·핵심 기능·데이터 파이프라인·시스템 구성·API 계약 요약·Open Questions·로드맵·
+구현 현황)을 `PRD_BACK.md`/`FEATURES_BACK.md` 기준으로 동기화함.
+
+- `docs/FEATURES_BACK.md`: CO1에 BOQ18 TODO 추가, CO6를 "취소"로 재작성
+- `docs/PRD_BACK.md`: 한 줄 정의·책임 영역 표·B-F2 로드맵·BOQ7 갱신, BOQ18 신규 추가
+- `docs/PRD.md`: §1/§3/§4/§5/§6/§7/§8/§9/§11/§12/§14 백엔드 관련 내용 전면 정리
+
+### Fixed
+
+#### TourCourseControllerTest 하드코딩 날짜로 인한 테스트 실패 수정
+
+AI 코스 생성 499 응답 테스트가 요청 바디에 `startDate: "2026-09-01"`을 하드코딩해
+뒀는데, 시간이 지나 해당 날짜가 과거가 되면서 `@FutureOrPresent` 검증에 걸려
+실패(400)하던 문제 수정. `LocalDate.now()` 기준 상대 날짜로 교체.
+
+### Files Changed (5 files)
+
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+- `docs/PRD.md`
+- `CHANGELOG.md`
+- `src/test/java/com/eodegano/cocobackend/controller/TourCourseControllerTest.java`
+
 ## [0.6.11] - 2026-08-29
 
 ### Added

@@ -170,15 +170,17 @@ class TourCourseControllerTest {
                         AiCourseGenerationException.ErrorCode.RESPONSE_PARSE_FAILED,
                         "AI 응답 파싱에 실패했습니다", true, "length", null));
 
+        LocalDate startDate = LocalDate.now().plusDays(1);
+        LocalDate endDate = startDate.plusDays(1);
         String requestBody = """
                 {
                   "peopleCount": 2,
-                  "startDate": "2026-09-01",
-                  "endDate": "2026-09-02",
+                  "startDate": "%s",
+                  "endDate": "%s",
                   "transport": "CAR",
                   "theme": ["자연"]
                 }
-                """;
+                """.formatted(startDate, endDate);
 
         mockMvc.perform(post("/api/v1/tour-course")
                         .contentType("application/json")
