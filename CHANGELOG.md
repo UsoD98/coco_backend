@@ -33,6 +33,18 @@ FE(Netlify, `gbcoco.netlify.app`)가 CORS 회피를 위해 자체 프록시로 �
 
 ### Docs
 
+#### BOQ1/BOQ4/BOQ5 문서 정리 — 실제로는 이미 해결됐거나 대상이 사라진 open question 정리
+
+`docs/PRD_BACK.md` 미결(Open Questions) 중 ✅ 표시 없이 남아있던 세 항목을 실제 코드
+상태와 대조해 확인 후 정리함. 코드 변경 없음.
+
+- BOQ1(인원 버킷 정의): PO2의 `peopleCount` 필터 자체가 BOQ14로 스코프아웃되며 매핑을
+  결정할 대상이 사라짐
+- BOQ4(비로그인 코스 소유권 이전): `PATCH /{courseId}/assign`으로 이미 구현 완료
+  상태였음(`TourCourseController.assignCourse()`), 문서 갱신만 누락돼 있었음
+- BOQ5(공유 링크 만료 정책): BOQ11 결정(스냅샷 테이블 없이 courseId 기반 라이브 view)에
+  따라 만료 정책 자체가 불필요해짐
+
 #### BOQ12 stars 자동 수집 조사 결과 기록 — 자동화·수동 입력 모두 보류
 
 `poi_rating.stars` 추가 수집을 위해 구글 Places API/네이버 지도/카카오 로컬 API 3개
@@ -47,11 +59,28 @@ FE(Netlify, `gbcoco.netlify.app`)가 CORS 회피를 위해 자체 프록시로 �
 - 자동화 경로가 모두 막힌 김에 기존 "AI 검색 기반 수동 입력" 계획도 함께 보류로 확정.
   재검토 시점·방향은 미정으로 열어둠 (stars는 현재 정렬/추천에 쓰이지 않는 순수 표시값)
 
-### Files Changed (3 files)
+#### 백엔드 코드 리뷰 할 일 문서 신규 (`docs/code_review/`)
+
+`/code-review high src/main/java/com/eodegano/cocobackend` 실행 결과(버그·보안·
+효율성 관점 10건)를 실제 코드와 대조 검증한 뒤, 앞으로 이 문서만 보고 수정 작업을
+진행할 수 있도록 우선순위·파일·라인·실패 시나리오·수정 방향을 정리한 체크리스트
+문서를 신규 작성함. 코드 변경 없음(문서만 추가).
+
+- `docs/code_review/2026-09-05_backend-review.md` 신규 — 보안 2건(카카오 OAuth
+  이메일 일치 자동 연결, 회원 정보 API IDOR), 정확성 버그 7건(TourAPI 재시도 소진 시
+  장애 은폐, POI 타입-contentTypeId 불일치, 캐시 키 누락, 코스 소유권 배정 동시성,
+  Groq 응답 필드 누락 시 미처리 NPE 3건), 효율성 1건(POI 상세 순차 조회) 기록
+- 검증 과정에서 초안의 부정확한 부분 2곳 수정: 비밀번호 변경은 대상 계정 현재
+  비밀번호 검증이 있어 순수 IDOR로는 불가함을 명시, `resolveContentTypeId` 관련 줄
+  번호를 실제 위치로 정정
+
+### Files Changed (5 files)
 
 - `deploy/nginx-cocobackend.conf`
 - `docs/FEATURES_BACK.md`
 - `docs/PRD_BACK.md`
+- `docs/code_review/2026-09-05_backend-review.md`
+- `CHANGELOG.md`
 
 ## [0.7.0] - 2026-09-05
 
