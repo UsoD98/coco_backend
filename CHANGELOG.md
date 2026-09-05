@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-05
+
+### Added
+
+#### 프론트 요청 IP·네트워크 정보 로깅용 nginx access_log 커스텀 포맷 추가
+
+프론트 요청이 실제로 어떤 IP에서 오는지 확인하고 향후 운영 가시성을 확보하기 위해
+`deploy/nginx-cocobackend.conf`에 라벨 붙은 `log_format`을 추가함.
+
+FE(Netlify, `gbcoco.netlify.app`)가 CORS 회피를 위해 자체 프록시로 이 서버를 호출하는
+구조라, 기존 기본 access_log의 `$remote_addr`는 실사용자 IP가 아니라 Netlify 프록시의
+유동 IP로 찍히는 것을 확인함. 실사용자 IP는 `X-Forwarded-For` 체인의 맨 앞 값.
+
+- `log_format cocobackend_named` 신규 — `time`/`remote_addr`/`client_ip`(XFF)/`method`/
+  `uri`/`status`/`request_time`/`upstream_time`/`referer`/`user_agent`를 `key=value` 형태로
+  라벨링해 가독성 확보 (`client_ip` 값은 `"IP, IP"` 형태로 쉼표+공백을 포함하므로 다른
+  값과 마찬가지로 따옴표로 감쌈, `time_local`도 날짜와 UTC 오프셋 사이에 공백이 있어
+  `combined` 포맷 관례대로 `[$time_local]`로 감쌈 — 둘 다 공백 기준 파싱이 깨지지
+  않도록)
+- 사이트 전용 `access_log /var/log/nginx/cocobackend-access.log`로 분리 (기존 기본
+  access_log는 그대로 유지)
+- 스프링부트 앱 레벨의 IP 로깅(인증 유저-IP 연계)은 이번 범위에서 제외 — 지금은 nginx
+  로그만으로 목적(실사용자 IP 확인 + 운영 데이터 축적)이 충분히 커버됨
+
+### Docs
+
+#### BOQ12 stars 자동 수집 조사 결과 기록 — 자동화·수동 입력 모두 보류
+
+`poi_rating.stars` 추가 수집을 위해 구글 Places API/네이버 지도/카카오 로컬 API 3개
+경로를 실제로 조사·테스트했으나 전부 막힘을 확인하고 그 내용을 문서화함.
+
+- 구글 Places API: `rating` 필드는 있으나 결제 계정(카드) 등록이 필수라 배제
+- 네이버 지도: 비공식 검색 엔드포인트가 `ncaptcha`로 자동화 요청을 차단 — 우회 시도는
+  하지 않기로 함
+- 카카오 로컬 API: 무료·카드 불필요하지만 응답에 별점 필드 자체가 없음
+- 경북 전체 라이브 후보 재조회 결과 총 1,624건으로, 기존 수동 입력 285건 대비 갭이
+  약 17.5%밖에 안 됨을 확인
+- 자동화 경로가 모두 막힌 김에 기존 "AI 검색 기반 수동 입력" 계획도 함께 보류로 확정.
+  재검토 시점·방향은 미정으로 열어둠 (stars는 현재 정렬/추천에 쓰이지 않는 순수 표시값)
+
+### Files Changed (3 files)
+
+- `deploy/nginx-cocobackend.conf`
+- `docs/FEATURES_BACK.md`
+- `docs/PRD_BACK.md`
+
 ## [0.7.0] - 2026-09-05
 
 ### Docs
