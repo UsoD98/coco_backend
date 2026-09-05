@@ -59,11 +59,27 @@ FE(Netlify, `gbcoco.netlify.app`)가 CORS 회피를 위해 자체 프록시로 �
 - 자동화 경로가 모두 막힌 김에 기존 "AI 검색 기반 수동 입력" 계획도 함께 보류로 확정.
   재검토 시점·방향은 미정으로 열어둠 (stars는 현재 정렬/추천에 쓰이지 않는 순수 표시값)
 
-### Files Changed (4 files)
+#### 백엔드 코드 리뷰 할 일 문서 신규 (`docs/code_review/`)
+
+`/code-review high src/main/java/com/eodegano/cocobackend` 실행 결과(버그·보안·
+효율성 관점 10건)를 실제 코드와 대조 검증한 뒤, 앞으로 이 문서만 보고 수정 작업을
+진행할 수 있도록 우선순위·파일·라인·실패 시나리오·수정 방향을 정리한 체크리스트
+문서를 신규 작성함. 코드 변경 없음(문서만 추가).
+
+- `docs/code_review/2026-09-05_backend-review.md` 신규 — 보안 2건(카카오 OAuth
+  이메일 일치 자동 연결, 회원 정보 API IDOR), 정확성 버그 7건(TourAPI 재시도 소진 시
+  장애 은폐, POI 타입-contentTypeId 불일치, 캐시 키 누락, 코스 소유권 배정 동시성,
+  Groq 응답 필드 누락 시 미처리 NPE 3건), 효율성 1건(POI 상세 순차 조회) 기록
+- 검증 과정에서 초안의 부정확한 부분 2곳 수정: 비밀번호 변경은 대상 계정 현재
+  비밀번호 검증이 있어 순수 IDOR로는 불가함을 명시, `resolveContentTypeId` 관련 줄
+  번호를 실제 위치로 정정
+
+### Files Changed (5 files)
 
 - `deploy/nginx-cocobackend.conf`
 - `docs/FEATURES_BACK.md`
 - `docs/PRD_BACK.md`
+- `docs/code_review/2026-09-05_backend-review.md`
 - `CHANGELOG.md`
 
 ## [0.7.0] - 2026-09-05
