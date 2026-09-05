@@ -12,7 +12,7 @@
 **경북 소규모 여행자(1~4인)를 위한 맞춤형 코스·예산 API 서버.**
 
 TourAPI를 요청 시점에 라이브 호출(Caffeine 캐시 경유)해 관광 정보를 조회하고, Groq AI로 여행 코스를 생성하며, 프론트엔드가 소비하는 REST API를 제공한다.
-최종 목표는 AI 의존 없이 **별점(`stars`)·추천수(`likes`) 기반 알고리즘으로 여행자 조건에 맞는 코스를 자동 추천**하는 서비스로 진화하는 것이다.
+**2026-09-05 확정**: Groq AI 기반 코스 생성을 영구 핵심 방식으로 유지한다 — "AI 의존 제거"는 더 이상 로드맵이 아니다. 별점(`stars`)·추천수(`likes`)는 AI 프롬프트 후보 품질을 높이는 보조 신호로 계속 활용한다.
 
 ---
 
@@ -24,8 +24,8 @@ TourAPI를 요청 시점에 라이브 호출(Caffeine 캐시 경유)해 관광 �
 | --- | --- |
 | **관광 정보 조회** | 한국관광공사 TourAPI **라이브 호출** (로컬 DB 미저장, Caffeine 캐시 TTL 6h 경유) |
 | **비용 저장** | POI별 실제 비용은 FE가 입력·산정한 값을 그대로 받아 `tour_course_user_defined_detail.cost`에 저장만 담당 (서버 측 평균 객단가 산출·추정 로직 없음 — 2026-08-16 BU1 취소) |
-| **AI 코스 생성 (현재)** | Groq LLM API를 활용한 일정별 코스 자동 생성 |
-| **알고리즘 추천 (목표)** | `stars`·`likes` 기반 POI 스코어링으로 LLM 없이 여행자 조건 맞춤 코스 추천 |
+| **AI 코스 생성 (핵심, 영구 유지)** | Groq LLM API를 활용한 일정별 코스 자동 생성. `stars`·`likes` 기반 Tier 샘플링은 프롬프트 후보 품질을 높이는 보조 신호 |
+| **AI 실패 시 안전망 (고도화 TODO)** | Groq 완전 실패 시 Tier 샘플링 기반 최소 코스로 대체하는 Degraded Fallback (BOQ18, 설계만 완료·미착수) |
 | **인증/인가** | JWT Stateless 인증, 카카오 OAuth 연동 |
 | **코스 영속** | 사용자 정의 코스 저장·조회·삭제, 공유 스냅샷 생성 |
 | **POI 큐레이션** | 지역·콘텐츠 유형 기반 필터링된 POI 목록 응답 (인원버킷·테마 필터는 2026-08-22 구현 안 하기로 확정 — BOQ14) |
@@ -132,15 +132,11 @@ com.eodegano.cocobackend/
 - CO1(Groq AI 코스 생성)을 그대로 유지한다. stars/likes 기반 Tier 샘플링(v0.2.6)까지는 v1에 포함되지만, Groq 자체를 대체하는 순수 알고리즘 전환은 v1 범위에서 제외한다.
 - 사유: 현재 Groq 기반 추천 품질이 충분히 좋다고 판단 — 무리하게 알고리즘으로 전환하기보다 출시 후 더 나은 설계가 확보되면 그때 붙인다.
 
-**중기 목표 (v2.0+ 고도화 — 보류, v1 이후 재검토)**
-- Tier 샘플링에서 나아가 Groq 완전 제거.
-- `poi_rating.stars`·`poi_rating.likes` 스코어링 결과로 직접 Day별 일정 조합.
-- TourAPI 라이브 조회(캐시 경유) 결과의 지역코드(`LDONGSIGNGUCD`) + `contenttypeid` + 스코어 기반 정렬 규칙 엔진으로 구현.
-
-**최종 목표 (v3.0+ 고도화 — 보류, v1 이후 재검토)**
-- Groq API 호출 없이 여행자가 입력한 조건(인원 버킷·테마·이동수단·기간·시군구)과 POI의 `stars`·`likes`를 결합한 스코어링 알고리즘으로 Day별 최적 코스 자동 생성.
-- 사용자 `travel_type`(개인 선호 여행 타입)을 추가 가중치로 반영.
-- 외부 LLM 의존 제거 → 응답 속도 향상·비용 절감·예측 가능성 확보.
+**장기 방향 — 2026-09-05 확정: Groq 완전 제거 로드맵 취소**
+- ~~중기(v2.0+): Tier 샘플링에서 나아가 Groq 완전 제거, 스코어링 결과로 직접 Day별 일정 조합~~
+- ~~최종(v3.0+): Groq API 호출 없이 `stars`·`likes`·`travel_type` 결합 스코어링 알고리즘으로 Day별 최적 코스 자동 생성~~
+- 위 두 단계 모두 취소. **AI(Groq) 기반 코스 생성을 영구 핵심 방식으로 유지**한다 — 지금 구조(Groq + stars/likes Tier 샘플링 보조)가 최종 형태이며 "언젠가 알고리즘으로 전환"은 더 이상 로드맵이 아니다.
+- 사유: 순수 알고리즘 엔진(유형별 할당 규칙, 스코어 가중치 튜닝)을 새로 구축하는 비용 대비 Groq 기반 추천 품질이 이미 충분하다고 판단. Groq 의존 리스크(모델 단종·rate limit·일시 장애)는 알고리즘 전환이 아니라 [BOQ18](#9-가정-및-미결-open-questions) Degraded Fallback 안전망(설계만 완료, 미착수)으로 대응.
 
 ### B-F3. POI별 비용 저장 (2026-08-16 재설계)
 
@@ -310,7 +306,7 @@ com.eodegano.cocobackend/
 - **BOQ4. 비로그인 코스 소유권 이전 타이밍** — 로그인 모달 성공 직후 `PATCH /api/v1/tour-course/{courseId}/assign` 방식 vs. FE 세션토큰 전달 방식 결정 필요.
 - **BOQ5. 공유 링크 만료 정책** — 스냅샷 TTL(무제한 vs. N일) 및 삭제 정책 확정 필요.
 - **BOQ6. 카카오 OAuth 처리 방식** — ✅ **확정·구현 완료 (v0.2.7)**: FE에서 발급된 카카오 AccessToken을 `POST /api/v1/auth/oauth/kakao/callback`으로 전달 → `KakaoApiClient`로 카카오 사용자 정보 검증 → 자체 JWT 발급. 기존 로컬 계정과 이메일 일치 시 카카오 연결, 신규 사용자는 자동 가입.
-- **BOQ7. 추천 코스 생성 주체** — 기본 추천 코스를 Groq AI가 생성하는지(현재 방식), `stars`·`likes` 기반 알고리즘으로 전환하는지, 또는 병행하는지 확정 필요. (FE PRD OQ9)
+- **BOQ7. 추천 코스 생성 주체** — ✅ **확정 (2026-09-05)**: Groq AI 코스 생성(CO1)을 영구 핵심 방식으로 유지한다. `stars`·`likes` 기반 순수 알고리즘 전환(CO6)은 취소 — Tier 샘플링 보조 신호로만 계속 사용. Groq 완전 실패 대응은 BOQ18(Degraded Fallback, 미착수) 참고.
 - **BOQ8. 데이터 커버리지 범위** (취소 — PO4 스코프아웃에 따라 논의 불필요)
 - **BOQ9. POI별 비용 저장** — ✅ **확정·구현 완료 (2026-08-16)**: `tour_course_user_defined_detail.cost INT NULL` 컬럼 추가 (오버라이드 개념이 아니라 FE 입력값을 그대로 저장). `PUT /{courseId}`(`PlaceUpdate.cost`)로 저장, 조회 시 저장값 우선 반환.
 - **BOQ10. 코스 제목(title) 저장** — ✅ **확정·구현 완료**: `tour_course_user_defined.title VARCHAR(255) NULL` 컬럼 추가(DDL ALTER). 코스 제목 수정 API(`PATCH /{courseId}/title`) 구현 완료.
@@ -322,6 +318,10 @@ com.eodegano.cocobackend/
 - **BOQ15. DB·외부 API(TourAPI) 연동 통합 테스트 인프라** — 🔶 **v0.5.3 신규, TODO(당장 착수 안 함)**: 현재 테스트는 Mockito 단위 테스트(`PoiCurationServiceImplTest`·`PoiDetailServiceImplTest`·`PoiLikeServiceImplTest`·`TourLiveDataServiceTest`)와 `@WebMvcTest` 슬라이스 테스트(`PoiControllerTest`, 서비스 계층은 Mock)까지만 구성되어 있고, 실제 MariaDB 쓰기(`PoiRating`/`UserPoiLike` insert·update)와 실제 TourAPI 응답 계약을 검증하는 테스트는 없음. 도입 시 필요한 것: (1) Testcontainers 기반 MariaDB 통합 테스트 환경, (2) `TourApiClient`가 `RestClient.create()`를 필드에서 직접 생성해 현재는 가로챌 수 없으므로 `RestClient.Builder` 주입으로 리팩터링 후 `MockRestServiceServer`/WireMock으로 스텁. 필요성은 확인됐으나 우선순위가 낮아 보류 — 착수 시점에 재검토.
 - **BOQ16. 무중단 배포 전환** — ✅ **레포 측 구현 완료 (2026-08-29)**: 기존 `systemctl restart cocobackend` 단일 호출로 인한 다운타임을, systemd 유닛 2개(blue=8080/green=8081)를 nginx 리버스 프록시로 전환하는 blue/green 방식으로 해결. `.github/workflows/deploy.yml`의 마지막 스텝이 비활성 슬롯 배포 → 재시작 → `/actuator/health` 헬스체크 → `deploy/switch-active.sh`로 nginx upstream 전환 → 이전 슬롯 종료 순서로 자동 수행하며, 헬스체크 실패 시 기존 활성 슬롯을 그대로 두고 배포만 실패 처리(자동 롤백 효과). Caffeine 캐시(BOQ13)가 인스턴스 로컬이라 전환 직후 새 인스턴스는 콜드스타트 상태지만 `PoiCacheWarmupScheduler`가 완화. **서버 최초 1회 설정(nginx 설치·systemd 유닛 등록·sudoers)은 자동화 범위 밖 — [deploy/BLUEGREEN_SETUP.md](../deploy/BLUEGREEN_SETUP.md) 절차대로 수동 적용 필요.** 상세: [FEATURES_BACK.md INF7](FEATURES_BACK.md#0-공통-인프라-cross-cutting).
 - **BOQ17. PO5 좋아요 토글 동시 요청(중복 클릭·재시도) 경합 처리** — 🔶 **2026-08-22 신규, TODO(고도화 — 당장 착수 안 함)**: 동일 유저가 같은 POI에 짧은 시간 내 좋아요 요청을 중복 전송하면(더블탭, 네트워크 재시도), `user_poi_like` 복합키(`userId`+`contentId`) 유니크 제약 덕분에 중복 행 삽입이나 `likes` 카운트 오적산 같은 데이터 정합성 붕괴는 이미 방지되어 있음. 다만 나중에 도착한 요청은 INSERT 시 `DataIntegrityViolationException`으로 트랜잭션이 롤백되어 500 에러로 응답됨 — 데이터는 안전하지만 UX가 매끄럽지 않음. 심각도가 낮아 지금은 보류하고, 실제 사용자 리포트나 로그로 관측되면 `PoiLikeServiceImpl.toggleLike`의 insert 경로에서 해당 예외를 잡아 "이미 좋아요 상태"로 처리하는 가벼운 방어 코드를 추가하는 방향(비관적 락 등 무거운 해법은 불필요 판단).
+- **BOQ18. AI 코스 생성 완전 실패 시 Degraded Fallback 안전망** — 🔶 **2026-09-05 신규, TODO(고도화 — 공모전 범위 아님, 당장 착수 안 함)**: 코스 생성(CO1)은 v1 이후에도 Groq 기반을 유지하기로 방향을 잡았으나, Groq 호출이 최대 재시도(3회) 소진 후에도 실패하면(rate limit·API 에러·빈 응답·파싱 실패·응답 검증 실패) `AiCourseGenerationException` → HTTP 499로 완전히 실패 처리되는 구조는 그대로 남는다. 심사·데모 시연 중 Groq 장애·rate limit이 겹치면 코스 생성 자체가 막히는 리스크가 있어, 완전 실패 대신 AI 없이 최소한의 코스를 반환하는 안전망을 설계만 해두고 착수는 보류한다.
+  - **설계 방향**: `TourCourseServiceImpl.selectByTypeQuota()`가 이미 뽑아둔 Tier 샘플링 후보(stars/likes 기반)를 그대로 사용하고, AI가 담당하던 Day별 배치·시간대 배정만 규칙 기반으로 대체 — 지리적 클러스터(`g` 필드, v0.6.8)로 같은 날에 묶고, 고정 시간 슬롯 템플릿(예: 09:00 관광 → 12:00 식사 → 14:00 관광 → 18:00 식사/숙박) 순서로 순차 배정. `thumbnailImg`/`operatingHours`/`cost`는 기존 라이브 조회·기본값 폴백 로직을 그대로 재사용 가능. 응답에 `degraded`(가칭) 플래그를 추가해 FE가 "AI 생성 실패로 간단 추천으로 대체" 안내를 띄울 수 있게 함.
+  - **미결**: fallback을 Groq 호출/파싱 단계 실패(RATE_LIMITED/API_CALL_FAILED/EMPTY_RESPONSE/RESPONSE_PARSE_FAILED)에만 적용할지, AI 응답 검증 실패(RESPONSE_VALIDATION_FAILED — 이동거리 초과 등)에도 적용할지는 착수 시점에 재검토.
+  - **착수 조건**: 없음(우선순위 낮음) — 공모전 규모 트래픽에서는 Groq 완전 실패 발생 빈도가 낮고 기존 재시도로 대부분 해결됨. 실제 장애·심사 중 실패 사례가 관측되면 그때 설계를 확정해 착수. 상세: [FEATURES_BACK.md CO1](FEATURES_BACK.md#4-ai-여행-코스-생성-course-generation).
 
 ---
 
