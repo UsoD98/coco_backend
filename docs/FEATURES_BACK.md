@@ -404,7 +404,7 @@ FE MVP 기준으로 백엔드 미구현 항목 우선순위를 나열한다.
 | --- | --- | --- | --- |
 | BOQ9 | `tour_course_user_defined_detail`에 비용 컬럼 추가 여부 | BU4 POI별 비용 저장 | ✅ 확정 (2026-08-16): `budget_override`(오버라이드 개념) 대신 단순 `cost INT NULL` 컬럼 추가 — FE 입력값을 그대로 저장 |
 | BOQ11 | 공유 스키마: `share_token` 컬럼 재추가 vs. 별도 `share_snapshot` 테이블 | SH1/SH2 공유 기능 | ✅ 확정: 별도 스냅샷 없이 courseId 직접 공개 뷰로 처리 |
-| BOQ12 | `stars` 데이터 수집 방법 확정 (`likes`는 PO5로 수집 중) | DA4, CO6 알고리즘 추천 | 미확정 (AI 검색 수동 입력 예정) |
+| BOQ12 | `stars` 데이터 수집 방법 확정 (`likes`는 PO5로 수집 중) | DA4 | 미확정 (2026-09-05: 구글 유료·네이버 캡차 차단·카카오 별점 필드 없음 확인, 무료 자동화 경로 없음 — 재검토 보류) |
 | BOQ13 | Caffeine 캐시 TTL | DA5, PO1~PO3, CO1, CO4, SH2 | ✅ 확정 (v0.5.0): 지역 후보 리스트·POI 상세 모두 TTL 6h |
 | BOQ14 | BU1 근거 테이블(`food_avg_price`) 소실에 따른 예산 메타데이터 재설계 | BU1, DA3 | ✅ 확정 (2026-08-16): 재설계하지 않고 BU1 기능 자체 취소. BU4(비용 직접 입력)로 대체 |
 
