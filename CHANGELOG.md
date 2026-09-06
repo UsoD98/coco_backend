@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-06
+
+### Fixed
+
+#### 회원 정보 API 소유권(본인 확인) 검증 누락 — IDOR 취약점 수정
+
+코드 리뷰(`docs/code_review/2026-09-05_backend-review.md` #2)에서 발견된 보안 문제.
+`/api/v1/user/{userId}` 계열 API(조회·닉네임 수정·비밀번호 변경·탈퇴)는 컨트롤러가
+`Authentication`을 아예 받지 않았고, 서비스 계층도 대상 유저 존재 여부만 확인하고
+호출자와 대조하지 않았음. `SecurityConfig`도 USER/ADMIN 역할만 검사하고 경로의
+`userId`가 본인인지는 검증하지 않아, 로그인한 아무 USER나 자신의 유효한 JWT로
+다른 유저의 정보 조회·닉네임 변경·탈퇴를 그대로 실행할 수 있었음(단, 비밀번호
+변경은 `currentPassword` 검증이 있어 순수 IDOR로는 뚫리지 않는 예외였음).
+
+`TourCourseServiceImpl`이 이미 같은 문제(코스 소유권 검증)를 겪고 정립해둔 패턴을
+그대로 재사용함 — 컨트롤러가 `authentication.getName()`(JWT로 서명 검증된 이메일,
+클라이언트가 조작 불가)을 서비스로 전달하고, 서비스가 대상 리소스와 대조해
+`AccessDeniedException`(→ 기존 `GlobalExceptionHandler`가 403으로 매핑)을 던지는
+방식. `User`는 코스와 달리 조회한 엔티티 자체에 이메일이 있어 추가 DB 조회 없이
+바로 비교 가능.
+
+- `UserController`: `getUser`/`updateNickname`/`updatePassword`/`deleteUser` 4개
+  메서드 모두 `Authentication authentication` 파라미터 추가, `authentication.getName()`과
+  `ROLE_ADMIN` 보유 여부를 서비스로 전달
+- `UserServiceImpl`: `verifyOwnership(user, requesterEmail, isAdmin, message)` 헬퍼
+  신규 — `findActiveUser()` 직후 호출해 대상 유저 이메일과 요청자 이메일이
+  일치하는지(또는 ADMIN인지) 확인, 불일치 시 액션별 메시지로 403 반환
+- ADMIN 역할은 본인 확인 없이 다른 유저 정보에 접근 가능(요청대로 예외 허용). 현재
+  ADMIN을 실제로 발급하는 가입 경로는 없어 당장 영향받는 기능은 없음
+- `updatePassword`는 기존 `currentPassword` 검증으로 실질적으로는 이미 안전했지만,
+  검증 로직이 나중에 바뀌어도 방어선이 남도록 4개 메서드 모두 동일 패턴 적용
+- `UserService` 인터페이스 시그니처 변경(`requesterEmail`, `isAdmin` 파라미터 추가)에
+  맞춰 `UserServiceTest` 기존 테스트 호출부 갱신
+
+### Testing
+
+#### 회원 정보 API 본인 확인 성공/실패/공격 시나리오 테스트 추가
+
+`UserServiceTest`에 기존 테스트(회원가입·비밀번호 변경·탈퇴) 호출부를 새 시그니처에
+맞게 갱신하고, 다음을 신규 추가:
+
+- 정상: 본인 조회(`getUserSuccess`)·본인 닉네임 수정(`updateNicknameSuccess`)
+- 실패: 다른 유저 이메일로 조회 시도 시 403(`getUserFailWithOtherUsersEmail`)
+- 공격 방어: 다른 유저 닉네임 변경 시도(`updateNicknameAttackAttemptBlocked`)·다른
+  유저 탈퇴 시도(`deleteUserAttackAttemptBlocked`) 각각 `AccessDeniedException` 발생과
+  함께 실제 데이터(닉네임/`deletedAt`)가 변경되지 않았는지까지 확인
+- ADMIN 예외: 다른 유저 이메일이어도 ADMIN이면 조회 허용(`adminBypassesOwnershipCheck`)
+
+### Docs
+
+#### 코드 리뷰 체크리스트 항목 2 완료 처리
+
+`docs/code_review/2026-09-05_backend-review.md` 항목 2를 ✅ 완료로 표시하고 적용한
+수정 내용·테스트 파일 기록.
+
+### Files Changed (5 files)
+
+- `src/main/java/com/eodegano/cocobackend/controller/UserController.java`
+- `src/main/java/com/eodegano/cocobackend/service/UserService.java`
+- `src/main/java/com/eodegano/cocobackend/service/UserServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/UserServiceTest.java`
+- `docs/code_review/2026-09-05_backend-review.md`
+
+## [0.8.0] - 2026-09-06
+
+### Fixed
+
+#### 카카오 OAuth 이메일 일치 자동 연결 — 계정 탈취(인증 우회) 취약점 수정
+
+코드 리뷰(`docs/code_review/2026-09-05_backend-review.md` #1)에서 발견된 보안 문제.
+기존에는 카카오 로그인 시 카카오 프로필 이메일이 로컬 계정 이메일과 **문자열만
+일치**하면 이메일 소유권 검증 없이 바로 `linkKakao()`로 연결하고 JWT를 발급했음.
+공격자가 자기 카카오 계정에 피해자의 로컬 가입 이메일을(인증 없이) 등록만 하고
+로그인하면, 피해자와의 상호작용 전혀 없이 즉시·영구적으로 피해자 계정에 접근
+가능한 상태였음.
+
+- `KakaoApiClient.KakaoUserInfo.KakaoAccount`에 `is_email_valid`/`is_email_verified`
+  필드 파싱 추가, `hasTrustedEmail()` 판별 메서드 신규 추가
+- `KakaoOAuthService.registerKakaoUser()`가 `hasTrustedEmail() == true`일 때만 기존
+  로컬 계정 조회·연동을 시도하도록 변경. 이메일이 없거나 카카오가 인증하지 않은
+  경우엔 기존 계정 조회 자체를 하지 않고, 합성 이메일(`kakao_<providerId>@kakao.local`)로
+  항상 별도 신규 계정을 생성함(`user.email` `uq_email` 유니크 제약 충돌 방지)
+- **트레이드오프**: 카카오 이메일을 미인증 상태로 등록한 정상 사용자는 로컬 계정과
+  영구적으로 분리된 별도 계정이 생성됨 — 보안을 위해 의도적으로 감수, 고도화 TODO는
+  BOQ19에 기록
+
+### Testing
+
+#### 카카오 OAuth 이메일 검증 성공/실패/공격 시나리오 테스트 추가
+
+- `KakaoApiClientTest` 신규: `is_email_valid`/`is_email_verified` 조합별
+  `hasTrustedEmail()` 판정 5건(둘 다 인증됨 / verified만 false / valid만 false /
+  필드 자체 누락 / 이메일 미동의) — 실제 카카오 응답 JSON을 그대로 역직렬화해 검증
+- `KakaoOAuthServiceTest` 신규 9건: 정상 재로그인·자동연동·신규가입 3건, 유효하지
+  않은 카카오 AccessToken이면 예외가 그대로 전파되고 DB 접근 자체가 없는지 확인하는
+  실패 케이스 1건, mock 기반 공격 방어(미인증 이메일이 피해자 이메일과 일치해도
+  미연동)/이메일 미동의 회귀 2건, **실제 카카오 API 응답 형태를 그대로 JSON
+  역직렬화해 서비스에 태우는 E2E 3건**(정상 인증 성공 1건 + `is_email_verified`
+  필드 자체가 없는 실전 공격 페이로드·명시적으로 `false`인 페이로드 각각 피해자
+  계정 미조회·격리된 신규 계정만 생성되는지 확인)
+- E2E 테스트 작성 중 실제 버그 하나 발견·수정: 미신뢰 분기가 `userInfo.getEmail()`을
+  그대로 써서, 이메일이 있지만 미인증인 경우 공격자가 입력한 실제(피해자) 이메일을
+  그대로 반환해 `uq_email` 유니크 제약 위반이 날 뻔했음 — `providerId` 기반 합성
+  이메일을 항상 명시적으로 생성하도록 수정
+
+### Docs
+
+#### BOQ6/BOQ19 문서 갱신, 백엔드 코드 리뷰 체크리스트 항목 1 완료 처리
+
+- `docs/PRD_BACK.md` BOQ6: 이메일 인증 여부를 확인하는 새 동작으로 갱신
+- `docs/PRD_BACK.md` BOQ19 신규: 미인증 카카오 이메일 사용자의 계정 영구 분리
+  트레이드오프를 고도화 TODO로 기록 (당장 착수 안 함, 마이페이지 수동 연동 기능으로
+  보완 예정)
+- `docs/code_review/2026-09-05_backend-review.md` 항목 1을 ✅ 완료로 표시하고 적용한
+  수정 내용·테스트 파일 기록
+
+### Files Changed (6 files)
+
+- `src/main/java/com/eodegano/cocobackend/client/KakaoApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java`
+- `src/test/java/com/eodegano/cocobackend/client/KakaoApiClientTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/KakaoOAuthServiceTest.java`
+- `docs/PRD_BACK.md`
+- `docs/code_review/2026-09-05_backend-review.md`
+
 ## [0.7.1] - 2026-09-05
 
 ### Added

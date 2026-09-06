@@ -59,6 +59,17 @@ public class KakaoApiClient {
             return kakaoAccount.getEmail();
         }
 
+        /**
+         * 카카오가 이메일 소유권을 실제로 인증했는지 여부.
+         * 이 값이 true일 때만 이메일 일치를 근거로 기존 로컬 계정과 자동 연동해도 안전하다.
+         */
+        public boolean hasTrustedEmail() {
+            return kakaoAccount != null
+                    && kakaoAccount.getEmail() != null
+                    && Boolean.TRUE.equals(kakaoAccount.getIsEmailValid())
+                    && Boolean.TRUE.equals(kakaoAccount.getIsEmailVerified());
+        }
+
         public String getNickname() {
             if (kakaoAccount == null || kakaoAccount.getProfile() == null
                     || kakaoAccount.getProfile().getNickname() == null) {
@@ -73,6 +84,12 @@ public class KakaoApiClient {
         public static class KakaoAccount {
             private String email;
             private Profile profile;
+
+            @JsonProperty("is_email_valid")
+            private Boolean isEmailValid;
+
+            @JsonProperty("is_email_verified")
+            private Boolean isEmailVerified;
         }
 
         @Getter

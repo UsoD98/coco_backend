@@ -9,7 +9,7 @@
 
 ## 우선순위 1 — 보안 (인증/인가 우회)
 
-### 🔲 1. 카카오 OAuth 이메일 일치만으로 계정 자동 연결 (계정 탈취 가능)
+### ✅ 1. 카카오 OAuth 이메일 일치만으로 계정 자동 연결 (계정 탈취 가능) — 2026-09-06 수정 완료
 
 - **파일**: `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java:48`
 - **문제**: 카카오 로그인 시 카카오 프로필 이메일과 일치하는 로컬 계정이 있으면, 이메일
@@ -21,8 +21,14 @@
 - **수정 방향**: 카카오 계정 정보에서 이메일 인증 여부(`is_email_verified` 등)를 함께
   확인하거나, 자동 연결 대신 로컬 계정 비밀번호 확인 단계를 거치도록 변경. 또는 이메일
   일치 자동 연결 자체를 제거하고 신규 계정으로만 가입 처리.
+- **적용한 수정**: `is_email_valid && is_email_verified`가 모두 true일 때만 이메일 일치로
+  자동 연결(`KakaoOAuthService.registerKakaoUser`). 미인증/미제공 이메일은 기존 계정 조회
+  자체를 하지 않고 합성 이메일(`kakao_<providerId>@kakao.local`)로 항상 별도 신규 계정
+  생성. 정상 사용자의 미인증 이메일 케이스는 계정이 영구 분리되는 트레이드오프가
+  있음(BOQ19로 고도화 TODO 기록, 당장 착수 안 함). 테스트:
+  `KakaoApiClientTest`, `KakaoOAuthServiceTest`. 상세: `docs/PRD_BACK.md` BOQ6/BOQ19.
 
-### 🔲 2. 회원 정보 API에 소유권(본인 확인) 검증 누락 (IDOR)
+### ✅ 2. 회원 정보 API에 소유권(본인 확인) 검증 누락 (IDOR) — 2026-09-06 수정 완료
 
 - **파일**: `src/main/java/com/eodegano/cocobackend/controller/UserController.java:34`
   (조회/닉네임 수정/비밀번호 변경/탈퇴 전체)
@@ -40,6 +46,14 @@
 - **수정 방향**: 컨트롤러 또는 서비스 계층에서 `authentication.getName()`(또는 인증
   주체의 userId)과 경로 파라미터 `userId`가 일치하는지 검증 후 불일치 시 403 반환.
   ADMIN 역할은 예외 허용 여부를 별도로 결정.
+- **적용한 수정**: `UserController` 4개 메서드 모두 `Authentication` 파라미터를 받아
+  `authentication.getName()`(JWT로 검증된 이메일)과 ROLE_ADMIN 여부를 서비스로 전달.
+  `UserServiceImpl.verifyOwnership()`이 `findActiveUser()`로 조회한 대상 유저의
+  이메일과 대조해 불일치 시(ADMIN 제외) `AccessDeniedException` → 403. `TourCourseServiceImpl`의
+  기존 소유권 검증 패턴과 동일한 방식이되, User 엔티티 자체에 이메일이 있어 추가 조회
+  없이 비교. `updatePassword`는 원래도 `currentPassword` 검증으로 실질적 방어가
+  됐지만 일관성을 위해 동일하게 적용. 테스트: `UserServiceTest`(15건, 성공/실패/공격
+  시나리오 포함).
 
 ---
 

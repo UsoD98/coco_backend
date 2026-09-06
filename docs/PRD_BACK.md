@@ -305,7 +305,7 @@ com.eodegano.cocobackend/
 - **BOQ3. 평균 객단가 데이터 출처** — ✅ **취소 (2026-08-16)**: 대체 데이터 소스를 찾지 않고 BU1 기능 자체를 취소. 사용자가 실제 비용을 직접 입력하는 방식(BOQ9/BU4)으로 대체.
 - **BOQ4. 비로그인 코스 소유권 이전 타이밍** — ✅ **확정·구현 완료 (2026-09-05 문서 정리)**: `PATCH /api/v1/tour-course/{courseId}/assign` 방식으로 이미 구현되어 있었음(`TourCourseController.assignCourse()` → `TourCourseService.assignCourse()`). 문서 갱신 누락이었을 뿐 실제 결정·구현은 완료 상태.
 - **BOQ5. 공유 링크 만료 정책** — ✅ **대상 소멸 (2026-09-05 문서 정리)**: BOQ11(2026-08-06/v0.2.6) 결정에 따라 `share_snapshot` 스냅샷 테이블 자체를 두지 않고 `GET /{courseId}/view`가 courseId 기준으로 항상 최신 코스 상태를 라이브 반환하는 방식으로 확정됨 — 스냅샷이 없으니 TTL·만료 정책 자체가 불필요.
-- **BOQ6. 카카오 OAuth 처리 방식** — ✅ **확정·구현 완료 (v0.2.7)**: FE에서 발급된 카카오 AccessToken을 `POST /api/v1/auth/oauth/kakao/callback`으로 전달 → `KakaoApiClient`로 카카오 사용자 정보 검증 → 자체 JWT 발급. 기존 로컬 계정과 이메일 일치 시 카카오 연결, 신규 사용자는 자동 가입.
+- **BOQ6. 카카오 OAuth 처리 방식** — ✅ **확정·구현 완료 (v0.2.7, 2026-09-06 보안 수정)**: FE에서 발급된 카카오 AccessToken을 `POST /api/v1/auth/oauth/kakao/callback`으로 전달 → `KakaoApiClient`로 카카오 사용자 정보 검증 → 자체 JWT 발급. **2026-09-06부터**: 이메일 일치만으로는 자동 연결하지 않고, 카카오가 이메일 소유권을 인증한 경우(`is_email_valid && is_email_verified`)에만 기존 로컬 계정과 연결. 미인증/미제공 이메일은 기존 계정 조회 자체를 시도하지 않고 합성 이메일(`kakao_<providerId>@kakao.local`)로 항상 별도 신규 계정 생성 — 코드 리뷰(`docs/code_review/2026-09-05_backend-review.md` #1)에서 발견된 계정 탈취(IDOR성 자동 연결) 취약점 수정. 미인증 이메일 정상 사용자의 계정 영구 분리 트레이드오프는 [BOQ19](#) 참고.
 - **BOQ7. 추천 코스 생성 주체** — ✅ **확정 (2026-09-05)**: Groq AI 코스 생성(CO1)을 영구 핵심 방식으로 유지한다. `stars`·`likes` 기반 순수 알고리즘 전환(CO6)은 취소 — Tier 샘플링 보조 신호로만 계속 사용. Groq 완전 실패 대응은 BOQ18(Degraded Fallback, 미착수) 참고.
 - **BOQ8. 데이터 커버리지 범위** (취소 — PO4 스코프아웃에 따라 논의 불필요)
 - **BOQ9. POI별 비용 저장** — ✅ **확정·구현 완료 (2026-08-16)**: `tour_course_user_defined_detail.cost INT NULL` 컬럼 추가 (오버라이드 개념이 아니라 FE 입력값을 그대로 저장). `PUT /{courseId}`(`PlaceUpdate.cost`)로 저장, 조회 시 저장값 우선 반환.
@@ -327,6 +327,9 @@ com.eodegano.cocobackend/
   - **설계 방향**: `TourCourseServiceImpl.selectByTypeQuota()`가 이미 뽑아둔 Tier 샘플링 후보(stars/likes 기반)를 그대로 사용하고, AI가 담당하던 Day별 배치·시간대 배정만 규칙 기반으로 대체 — 지리적 클러스터(`g` 필드, v0.6.8)로 같은 날에 묶고, 고정 시간 슬롯 템플릿(예: 09:00 관광 → 12:00 식사 → 14:00 관광 → 18:00 식사/숙박) 순서로 순차 배정. `thumbnailImg`/`operatingHours`/`cost`는 기존 라이브 조회·기본값 폴백 로직을 그대로 재사용 가능. 응답에 `degraded`(가칭) 플래그를 추가해 FE가 "AI 생성 실패로 간단 추천으로 대체" 안내를 띄울 수 있게 함.
   - **미결**: fallback을 Groq 호출/파싱 단계 실패(RATE_LIMITED/API_CALL_FAILED/EMPTY_RESPONSE/RESPONSE_PARSE_FAILED)에만 적용할지, AI 응답 검증 실패(RESPONSE_VALIDATION_FAILED — 이동거리 초과 등)에도 적용할지는 착수 시점에 재검토.
   - **착수 조건**: 없음(우선순위 낮음) — 공모전 규모 트래픽에서는 Groq 완전 실패 발생 빈도가 낮고 기존 재시도로 대부분 해결됨. 실제 장애·심사 중 실패 사례가 관측되면 그때 설계를 확정해 착수. 상세: [FEATURES_BACK.md CO1](FEATURES_BACK.md#4-ai-여행-코스-생성-course-generation).
+- **BOQ19. 카카오 이메일 미인증 사용자의 계정 영구 분리** — 🔶 **2026-09-06 신규, TODO(고도화 — 당장 착수 안 함)**: BOQ6 보안 수정(2026-09-06)으로 카카오 이메일이 인증되지 않은 경우 기존 로컬 계정과 자동 연동하지 않고 별도 카카오 전용 계정(합성 이메일)을 생성하게 됨. 정상 사용자가 카카오 계정에 이메일은 등록했지만 인증을 완료하지 않은 상태로 로그인하면, 로컬 계정과 영구적으로 분리된 계정이 생성됨 — 이후 이메일을 인증해도 재로그인 시 `provider_id`로 먼저 매치되어 자동으로 합쳐지지 않음. 보안(계정 탈취 방지)을 위해 의도적으로 받아들인 트레이드오프이며 당장 착수하지 않음.
+  - **개선 방향(착수 시)**: 로그인된 상태에서 마이페이지 등을 통해 "계정 수동 연동" 기능을 제공 — 이미 로그인된 사용자 본인 확인(JWT)이 되어 있으므로 이메일 인증 여부와 무관하게 안전하게 연동 가능.
+  - **착수 조건**: 없음(우선순위 낮음) — 실제 사용자 문의·리포트로 관측되면 그때 착수.
 
 ---
 
