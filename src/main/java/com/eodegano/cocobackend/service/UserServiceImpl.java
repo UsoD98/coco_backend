@@ -5,6 +5,7 @@ import com.eodegano.cocobackend.dto.*;
 import com.eodegano.cocobackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,23 +50,25 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserInfoResponseDto getUser(Long userId) {
+    public UserInfoResponseDto getUser(Long userId, String requesterEmail, boolean isAdmin) {
         User user = findActiveUser(userId);
+        verifyOwnership(user, requesterEmail, isAdmin, "본인 정보만 조회할 수 있습니다.");
         return new UserInfoResponseDto(user);
     }
 
     @Override
     @Transactional
-    public void updateNickname(Long userId, UserUpdateNicknameRequestDto request) {
+    public void updateNickname(Long userId, UserUpdateNicknameRequestDto request, String requesterEmail, boolean isAdmin) {
         User user = findActiveUser(userId);
+        verifyOwnership(user, requesterEmail, isAdmin, "본인 닉네임만 수정할 수 있습니다.");
         user.updateNickname(request.getNickname());
     }
 
     @Override
     @Transactional
-    public void updatePassword(Long userId, UserUpdatePasswordRequestDto request) {
+    public void updatePassword(Long userId, UserUpdatePasswordRequestDto request, String requesterEmail, boolean isAdmin) {
         User user = findActiveUser(userId);
-
+        verifyOwnership(user, requesterEmail, isAdmin, "본인 비밀번호만 변경할 수 있습니다.");
 
         if (user.getPassword() == null) {
             throw new IllegalArgumentException("소셜 로그인 유저는 비밀번호를 변경할 수 없습니다.");
@@ -86,8 +89,9 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void deleteUser(Long userId) {
+    public void deleteUser(Long userId, String requesterEmail, boolean isAdmin) {
         User user = findActiveUser(userId);
+        verifyOwnership(user, requesterEmail, isAdmin, "본인 계정만 탈퇴할 수 있습니다.");
         user.delete();
     }
 
@@ -95,5 +99,12 @@ public class UserServiceImpl implements UserService {
     private User findActiveUser(Long userId) {
         return userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
+    }
+
+    // 본인 확인 (ADMIN은 예외 허용) — JWT에서 검증된 이메일과 대상 유저 이메일을 대조
+    private void verifyOwnership(User user, String requesterEmail, boolean isAdmin, String message) {
+        if (!isAdmin && !user.getEmail().equals(requesterEmail)) {
+            throw new AccessDeniedException(message);
+        }
     }
 }

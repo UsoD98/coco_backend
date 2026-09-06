@@ -6,11 +6,11 @@ public interface UserService {
 
     UserJoinResponseDto join(UserJoinRequestDto request);
 
-    UserInfoResponseDto getUser(Long userId);
+    UserInfoResponseDto getUser(Long userId, String requesterEmail, boolean isAdmin);
 
-    void updateNickname(Long userId, UserUpdateNicknameRequestDto request);
+    void updateNickname(Long userId, UserUpdateNicknameRequestDto request, String requesterEmail, boolean isAdmin);
 
-    void updatePassword(Long userId, UserUpdatePasswordRequestDto request);
+    void updatePassword(Long userId, UserUpdatePasswordRequestDto request, String requesterEmail, boolean isAdmin);
 
-    void deleteUser(Long userId);
+    void deleteUser(Long userId, String requesterEmail, boolean isAdmin);
 }

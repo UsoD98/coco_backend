@@ -28,7 +28,7 @@
   있음(BOQ19로 고도화 TODO 기록, 당장 착수 안 함). 테스트:
   `KakaoApiClientTest`, `KakaoOAuthServiceTest`. 상세: `docs/PRD_BACK.md` BOQ6/BOQ19.
 
-### 🔲 2. 회원 정보 API에 소유권(본인 확인) 검증 누락 (IDOR)
+### ✅ 2. 회원 정보 API에 소유권(본인 확인) 검증 누락 (IDOR) — 2026-09-06 수정 완료
 
 - **파일**: `src/main/java/com/eodegano/cocobackend/controller/UserController.java:34`
   (조회/닉네임 수정/비밀번호 변경/탈퇴 전체)
@@ -46,6 +46,14 @@
 - **수정 방향**: 컨트롤러 또는 서비스 계층에서 `authentication.getName()`(또는 인증
   주체의 userId)과 경로 파라미터 `userId`가 일치하는지 검증 후 불일치 시 403 반환.
   ADMIN 역할은 예외 허용 여부를 별도로 결정.
+- **적용한 수정**: `UserController` 4개 메서드 모두 `Authentication` 파라미터를 받아
+  `authentication.getName()`(JWT로 검증된 이메일)과 ROLE_ADMIN 여부를 서비스로 전달.
+  `UserServiceImpl.verifyOwnership()`이 `findActiveUser()`로 조회한 대상 유저의
+  이메일과 대조해 불일치 시(ADMIN 제외) `AccessDeniedException` → 403. `TourCourseServiceImpl`의
+  기존 소유권 검증 패턴과 동일한 방식이되, User 엔티티 자체에 이메일이 있어 추가 조회
+  없이 비교. `updatePassword`는 원래도 `currentPassword` 검증으로 실질적 방어가
+  됐지만 일관성을 위해 동일하게 적용. 테스트: `UserServiceTest`(15건, 성공/실패/공격
+  시나리오 포함).
 
 ---
 

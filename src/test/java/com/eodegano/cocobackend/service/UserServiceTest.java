@@ -10,10 +10,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,6 +33,7 @@ class UserServiceTest {
 
     private User mockUser;
     private static final String EMAIL = "test@test.com";
+    private static final String OTHER_EMAIL = "other@test.com";
     private static final String ENCODED_PASSWORD = "encodedPassword";
 
     @BeforeEach
@@ -111,7 +114,7 @@ class UserServiceTest {
         given(request.getCurrentPassword()).willReturn("currentPassword");
         given(request.getNewPassword()).willReturn("newPassword123!");
 
-        userService.updatePassword(1L, request);
+        userService.updatePassword(1L, request, EMAIL, false);
 
         verify(passwordEncoder).encode("newPassword123!");
     }
@@ -130,7 +133,7 @@ class UserServiceTest {
 
         UserUpdatePasswordRequestDto request = mock(UserUpdatePasswordRequestDto.class);
 
-        assertThatThrownBy(() -> userService.updatePassword(1L, request))
+        assertThatThrownBy(() -> userService.updatePassword(1L, request, EMAIL, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("소셜 로그인 유저는 비밀번호를 변경할 수 없습니다.");
     }
@@ -144,7 +147,7 @@ class UserServiceTest {
         UserUpdatePasswordRequestDto request = mock(UserUpdatePasswordRequestDto.class);
         given(request.getCurrentPassword()).willReturn("wrongPassword");
 
-        assertThatThrownBy(() -> userService.updatePassword(1L, request))
+        assertThatThrownBy(() -> userService.updatePassword(1L, request, EMAIL, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("현재 비밀번호가 일치하지 않습니다.");
     }
@@ -160,7 +163,7 @@ class UserServiceTest {
         given(request.getCurrentPassword()).willReturn("currentPassword");
         given(request.getNewPassword()).willReturn("currentPassword");
 
-        assertThatThrownBy(() -> userService.updatePassword(1L, request))
+        assertThatThrownBy(() -> userService.updatePassword(1L, request, EMAIL, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("새 비밀번호는 현재 비밀번호와 달라야 합니다.");
     }
@@ -174,7 +177,7 @@ class UserServiceTest {
     void deleteUserSuccess() {
         given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
 
-        userService.deleteUser(1L);
+        userService.deleteUser(1L, EMAIL, false);
 
         verify(userRepository).findByIdAndDeletedAtIsNull(1L);
     }
@@ -184,8 +187,90 @@ class UserServiceTest {
     void deleteUserFailWithNotFound() {
         given(userRepository.findByIdAndDeletedAtIsNull(999L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> userService.deleteUser(999L))
+        assertThatThrownBy(() -> userService.deleteUser(999L, EMAIL, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("존재하지 않는 유저입니다.");
+    }
+
+    // ───────────────────────────────────────────────
+    // 회원 정보 조회
+    // ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("회원 정보 조회 성공 - 본인 조회")
+    void getUserSuccess() {
+        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+
+        UserInfoResponseDto result = userService.getUser(1L, EMAIL, false);
+
+        assertThat(result.getEmail()).isEqualTo(EMAIL);
+    }
+
+    // ───────────────────────────────────────────────
+    // 닉네임 수정
+    // ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("닉네임 수정 성공 - 본인 수정")
+    void updateNicknameSuccess() {
+        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+
+        UserUpdateNicknameRequestDto request = mock(UserUpdateNicknameRequestDto.class);
+        given(request.getNickname()).willReturn("새닉네임");
+
+        userService.updateNickname(1L, request, EMAIL, false);
+
+        assertThat(mockUser.getNickname()).isEqualTo("새닉네임");
+    }
+
+    // ───────────────────────────────────────────────
+    // 보안: 본인 확인(IDOR) — 성공/실패/공격 시나리오
+    // ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("보안 실패 - 다른 유저 이메일로 회원 정보 조회 시도 시 403(AccessDeniedException)")
+    void getUserFailWithOtherUsersEmail() {
+        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> userService.getUser(1L, OTHER_EMAIL, false))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("본인 정보만 조회할 수 있습니다.");
+    }
+
+    @Test
+    @DisplayName("공격 방어 - 다른 유저 닉네임을 임의로 변경 시도 시 차단되고 실제 값은 변경되지 않음")
+    void updateNicknameAttackAttemptBlocked() {
+        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+
+        UserUpdateNicknameRequestDto request = mock(UserUpdateNicknameRequestDto.class);
+
+        assertThatThrownBy(() -> userService.updateNickname(1L, request, OTHER_EMAIL, false))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("본인 닉네임만 수정할 수 있습니다.");
+
+        // 공격 시도가 실제로 데이터에 반영되지 않았는지 확인
+        assertThat(mockUser.getNickname()).isEqualTo("테스터");
+    }
+
+    @Test
+    @DisplayName("공격 방어 - 다른 유저 계정을 임의로 탈퇴시키는 시도 차단, deletedAt 변경 없음")
+    void deleteUserAttackAttemptBlocked() {
+        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> userService.deleteUser(1L, OTHER_EMAIL, false))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("본인 계정만 탈퇴할 수 있습니다.");
+
+        assertThat(mockUser.getDeletedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("ADMIN 예외 - 다른 유저 이메일이어도 ADMIN이면 조회/수정/탈퇴 허용")
+    void adminBypassesOwnershipCheck() {
+        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+
+        UserInfoResponseDto result = userService.getUser(1L, OTHER_EMAIL, true);
+
+        assertThat(result.getEmail()).isEqualTo(EMAIL);
     }
 }
