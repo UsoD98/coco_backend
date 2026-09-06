@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-06
+
+### Fixed
+
+#### 카카오 OAuth 이메일 일치 자동 연결 — 계정 탈취(인증 우회) 취약점 수정
+
+코드 리뷰(`docs/code_review/2026-09-05_backend-review.md` #1)에서 발견된 보안 문제.
+기존에는 카카오 로그인 시 카카오 프로필 이메일이 로컬 계정 이메일과 **문자열만
+일치**하면 이메일 소유권 검증 없이 바로 `linkKakao()`로 연결하고 JWT를 발급했음.
+공격자가 자기 카카오 계정에 피해자의 로컬 가입 이메일을(인증 없이) 등록만 하고
+로그인하면, 피해자와의 상호작용 전혀 없이 즉시·영구적으로 피해자 계정에 접근
+가능한 상태였음.
+
+- `KakaoApiClient.KakaoUserInfo.KakaoAccount`에 `is_email_valid`/`is_email_verified`
+  필드 파싱 추가, `hasTrustedEmail()` 판별 메서드 신규 추가
+- `KakaoOAuthService.registerKakaoUser()`가 `hasTrustedEmail() == true`일 때만 기존
+  로컬 계정 조회·연동을 시도하도록 변경. 이메일이 없거나 카카오가 인증하지 않은
+  경우엔 기존 계정 조회 자체를 하지 않고, 합성 이메일(`kakao_<providerId>@kakao.local`)로
+  항상 별도 신규 계정을 생성함(`user.email` `uq_email` 유니크 제약 충돌 방지)
+- **트레이드오프**: 카카오 이메일을 미인증 상태로 등록한 정상 사용자는 로컬 계정과
+  영구적으로 분리된 별도 계정이 생성됨 — 보안을 위해 의도적으로 감수, 고도화 TODO는
+  BOQ19에 기록
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/client/KakaoApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java`
+
 ## [0.7.1] - 2026-09-05
 
 ### Added
