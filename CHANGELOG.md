@@ -30,10 +30,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   영구적으로 분리된 별도 계정이 생성됨 — 보안을 위해 의도적으로 감수, 고도화 TODO는
   BOQ19에 기록
 
-### Files Changed (2 files)
+### Testing
+
+#### 카카오 OAuth 이메일 검증 성공/실패/공격 시나리오 테스트 추가
+
+- `KakaoApiClientTest` 신규: `is_email_valid`/`is_email_verified` 조합별
+  `hasTrustedEmail()` 판정 5건(둘 다 인증됨 / verified만 false / valid만 false /
+  필드 자체 누락 / 이메일 미동의) — 실제 카카오 응답 JSON을 그대로 역직렬화해 검증
+- `KakaoOAuthServiceTest` 신규 9건: 정상 재로그인·자동연동·신규가입 3건, 유효하지
+  않은 카카오 AccessToken이면 예외가 그대로 전파되고 DB 접근 자체가 없는지 확인하는
+  실패 케이스 1건, mock 기반 공격 방어(미인증 이메일이 피해자 이메일과 일치해도
+  미연동)/이메일 미동의 회귀 2건, **실제 카카오 API 응답 형태를 그대로 JSON
+  역직렬화해 서비스에 태우는 E2E 3건**(정상 인증 성공 1건 + `is_email_verified`
+  필드 자체가 없는 실전 공격 페이로드·명시적으로 `false`인 페이로드 각각 피해자
+  계정 미조회·격리된 신규 계정만 생성되는지 확인)
+- E2E 테스트 작성 중 실제 버그 하나 발견·수정: 미신뢰 분기가 `userInfo.getEmail()`을
+  그대로 써서, 이메일이 있지만 미인증인 경우 공격자가 입력한 실제(피해자) 이메일을
+  그대로 반환해 `uq_email` 유니크 제약 위반이 날 뻔했음 — `providerId` 기반 합성
+  이메일을 항상 명시적으로 생성하도록 수정
+
+### Files Changed (4 files)
 
 - `src/main/java/com/eodegano/cocobackend/client/KakaoApiClient.java`
 - `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java`
+- `src/test/java/com/eodegano/cocobackend/client/KakaoApiClientTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/KakaoOAuthServiceTest.java`
 
 ## [0.7.1] - 2026-09-05
 
