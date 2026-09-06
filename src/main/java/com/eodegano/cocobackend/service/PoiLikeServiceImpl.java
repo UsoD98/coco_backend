@@ -31,7 +31,7 @@ public class PoiLikeServiceImpl implements PoiLikeService {
     @Override
     @Transactional
     public PoiLikeResponseDto toggleLike(Long contentId, String userEmail) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         Optional<UserPoiLike> existing = userPoiLikeRepository.findByUserIdAndContentId(user.getId(), contentId);

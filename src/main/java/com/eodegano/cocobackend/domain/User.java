@@ -51,9 +51,6 @@ public class User {
     @Column(name = "password", length = 255)
     private String password;
 
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -95,16 +92,6 @@ public class User {
 
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
-    }
-
-    public void delete() {
-        this.deletedAt = LocalDateTime.now();
-    }
-
-    public void rejoin(String nickname, String password) {
-        this.nickname = nickname;
-        this.password = password;
-        this.deletedAt = null;
     }
 
     /** 로컬 계정에 카카오 providerId를 연결한다. */

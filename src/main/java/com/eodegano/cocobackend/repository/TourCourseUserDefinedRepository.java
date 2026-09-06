@@ -19,4 +19,9 @@ public interface TourCourseUserDefinedRepository extends JpaRepository<TourCours
     @Modifying
     @Query("UPDATE TourCourseUserDefined c SET c.userId = :userId WHERE c.id = :courseId AND c.userId IS NULL")
     int assignUserIfUnassigned(@Param("courseId") Long courseId, @Param("userId") Long userId);
+
+    /** 회원 탈퇴(하드 삭제) 시 소유 코스는 비로그인 생성 코스와 동일하게 userId를 null로 되돌린다. */
+    @Modifying
+    @Query("UPDATE TourCourseUserDefined c SET c.userId = null WHERE c.userId = :userId")
+    void unassignAllByUserId(@Param("userId") Long userId);
 }

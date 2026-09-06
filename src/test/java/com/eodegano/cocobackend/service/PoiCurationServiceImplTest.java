@@ -161,7 +161,7 @@ class PoiCurationServiceImplTest {
     void getPoiListLikedTrueForLikedContentOnly() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa, gyeongjuFood));
         User user = User.builder().id(1L).email("test@test.com").nickname("tester").build();
-        given(userRepository.findByEmailAndDeletedAtIsNull("test@test.com")).willReturn(Optional.of(user));
+        given(userRepository.findByEmail("test@test.com")).willReturn(Optional.of(user));
         given(userPoiLikeRepository.findContentIdsByUserIdAndContentIdIn(1L, List.of(126289L, 999999L)))
                 .willReturn(List.of(126289L));
 
@@ -179,7 +179,7 @@ class PoiCurationServiceImplTest {
     @DisplayName("성공 - 유효 토큰이지만 탈퇴 등으로 사용자 미조회 시 liked=false 안전 처리")
     void getPoiListLikedFalseWhenUserNotFound() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(bulguksa));
-        given(userRepository.findByEmailAndDeletedAtIsNull("ghost@test.com")).willReturn(Optional.empty());
+        given(userRepository.findByEmail("ghost@test.com")).willReturn(Optional.empty());
 
         PoiCurationResponseDto result = poiCurationService.getPoiList("35130", 2, null, "ghost@test.com");
 

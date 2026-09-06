@@ -47,7 +47,7 @@ class PoiLikeServiceImplTest {
     @Test
     @DisplayName("실패 - 존재하지 않는 사용자 → NoSuchElementException")
     void toggleLikeFailWithUserNotFound() {
-        given(userRepository.findByEmailAndDeletedAtIsNull(EMAIL)).willReturn(Optional.empty());
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> poiLikeService.toggleLike(CONTENT_ID, EMAIL))
                 .isInstanceOf(NoSuchElementException.class)
@@ -57,7 +57,7 @@ class PoiLikeServiceImplTest {
     @Test
     @DisplayName("좋아요 추가 성공 - poi_rating 행이 없으면 on-demand 생성")
     void toggleLikeAddSuccessWithNewPoiRating() {
-        given(userRepository.findByEmailAndDeletedAtIsNull(EMAIL)).willReturn(Optional.of(mockUser));
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mockUser));
         given(userPoiLikeRepository.findByUserIdAndContentId(1L, CONTENT_ID)).willReturn(Optional.empty());
         given(poiRatingRepository.existsById(CONTENT_ID)).willReturn(false);
         given(poiRatingRepository.findById(CONTENT_ID))
@@ -75,7 +75,7 @@ class PoiLikeServiceImplTest {
     @Test
     @DisplayName("좋아요 추가 성공 - poi_rating 행이 이미 있으면 원자적 increment")
     void toggleLikeAddSuccessWithExistingPoiRating() {
-        given(userRepository.findByEmailAndDeletedAtIsNull(EMAIL)).willReturn(Optional.of(mockUser));
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mockUser));
         given(userPoiLikeRepository.findByUserIdAndContentId(1L, CONTENT_ID)).willReturn(Optional.empty());
         given(poiRatingRepository.existsById(CONTENT_ID)).willReturn(true);
         given(poiRatingRepository.findById(CONTENT_ID))
@@ -93,7 +93,7 @@ class PoiLikeServiceImplTest {
     @DisplayName("좋아요 취소 성공 - 기존 좋아요 삭제 + 원자적 decrement")
     void toggleLikeRemoveSuccess() {
         UserPoiLike existing = UserPoiLike.of(1L, CONTENT_ID);
-        given(userRepository.findByEmailAndDeletedAtIsNull(EMAIL)).willReturn(Optional.of(mockUser));
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mockUser));
         given(userPoiLikeRepository.findByUserIdAndContentId(1L, CONTENT_ID)).willReturn(Optional.of(existing));
         given(poiRatingRepository.findById(CONTENT_ID))
                 .willReturn(Optional.of(PoiRating.builder().contentid(CONTENT_ID).likes(2).build()));
@@ -111,7 +111,7 @@ class PoiLikeServiceImplTest {
     @DisplayName("좋아요 취소 성공 - poi_rating 조회 실패해도 likes 0으로 방어")
     void toggleLikeRemoveSuccessWithMissingPoiRating() {
         UserPoiLike existing = UserPoiLike.of(1L, CONTENT_ID);
-        given(userRepository.findByEmailAndDeletedAtIsNull(EMAIL)).willReturn(Optional.of(mockUser));
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mockUser));
         given(userPoiLikeRepository.findByUserIdAndContentId(1L, CONTENT_ID)).willReturn(Optional.of(existing));
         given(poiRatingRepository.findById(CONTENT_ID)).willReturn(Optional.empty());
 

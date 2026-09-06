@@ -41,11 +41,11 @@ public class AuthService {
         }
 
         String email = authentication.getName();
-        User user = userRepository.findByEmailAndDeletedAtIsNull(email)
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
 
-        String accessToken = jwtProvider.generateAccessToken(user.getEmail(), user.getRole());
-        String refreshToken = jwtProvider.generateRefreshToken(user.getEmail(), user.getRole());
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId(), user.getEmail(), user.getRole());
 
         refreshTokenRepository.findByUserAndProvider(user, "local")
                 .ifPresentOrElse(
@@ -89,8 +89,8 @@ public class AuthService {
         }
 
         User user = savedToken.getUser();
-        String newAccessToken = jwtProvider.generateAccessToken(user.getEmail(), user.getRole());
-        String newRefreshToken = jwtProvider.generateRefreshToken(user.getEmail(), user.getRole());
+        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String newRefreshToken = jwtProvider.generateRefreshToken(user.getId(), user.getEmail(), user.getRole());
 
         savedToken.rotate(newRefreshToken, jwtProvider.getRefreshTokenExpiresAt());
 

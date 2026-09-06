@@ -2,6 +2,10 @@ package com.eodegano.cocobackend.service;
 
 import com.eodegano.cocobackend.domain.User;
 import com.eodegano.cocobackend.dto.*;
+import com.eodegano.cocobackend.repository.PoiRatingRepository;
+import com.eodegano.cocobackend.repository.RefreshTokenRepository;
+import com.eodegano.cocobackend.repository.TourCourseUserDefinedRepository;
+import com.eodegano.cocobackend.repository.UserPoiLikeRepository;
 import com.eodegano.cocobackend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +35,10 @@ class UserServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private RefreshTokenRepository refreshTokenRepository;
+    @Mock private UserPoiLikeRepository userPoiLikeRepository;
+    @Mock private PoiRatingRepository poiRatingRepository;
+    @Mock private TourCourseUserDefinedRepository tourCourseUserDefinedRepository;
 
     private User mockUser;
     private static final String EMAIL = "test@test.com";
@@ -53,8 +62,7 @@ class UserServiceTest {
     @Test
     @DisplayName("회원가입 성공")
     void joinSuccess() {
-        given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(false);
-        given(userRepository.findByEmailAndDeletedAtIsNotNull(EMAIL)).willReturn(Optional.empty());
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
         given(passwordEncoder.encode(anyString())).willReturn(ENCODED_PASSWORD);
         given(userRepository.save(any(User.class))).willReturn(mockUser);
 
@@ -71,7 +79,7 @@ class UserServiceTest {
     @Test
     @DisplayName("회원가입 실패 - 이미 사용 중인 이메일")
     void joinFailWithDuplicateEmail() {
-        given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(true);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(true);
 
         UserJoinRequestDto request = mock(UserJoinRequestDto.class);
         given(request.getEmail()).willReturn(EMAIL);
@@ -81,23 +89,6 @@ class UserServiceTest {
                 .hasMessage("이미 사용 중인 이메일입니다.");
     }
 
-    @Test
-    @DisplayName("재가입 성공 - 탈퇴한 이력이 있는 이메일")
-    void joinSuccessWithRejoin() {
-        given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(false);
-        given(userRepository.findByEmailAndDeletedAtIsNotNull(EMAIL)).willReturn(Optional.of(mockUser));
-        given(passwordEncoder.encode(anyString())).willReturn(ENCODED_PASSWORD);
-
-        UserJoinRequestDto request = mock(UserJoinRequestDto.class);
-        given(request.getEmail()).willReturn(EMAIL);
-        given(request.getNickname()).willReturn("테스터");
-        given(request.getPassword()).willReturn("password123!");
-
-        userService.join(request);
-
-        verify(userRepository, never()).save(any()); // 재가입은 save 안 함 (dirty checking)
-    }
-
     // ───────────────────────────────────────────────
     // 비밀번호 변경
     // ───────────────────────────────────────────────
@@ -105,7 +96,7 @@ class UserServiceTest {
     @Test
     @DisplayName("비밀번호 변경 성공")
     void updatePasswordSuccess() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
         given(passwordEncoder.matches("currentPassword", ENCODED_PASSWORD)).willReturn(true);
         given(passwordEncoder.matches("newPassword123!", ENCODED_PASSWORD)).willReturn(false);
         given(passwordEncoder.encode("newPassword123!")).willReturn("newEncodedPassword");
@@ -129,7 +120,7 @@ class UserServiceTest {
                 .role("USER")
                 .build();
 
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(socialUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(socialUser));
 
         UserUpdatePasswordRequestDto request = mock(UserUpdatePasswordRequestDto.class);
 
@@ -141,7 +132,7 @@ class UserServiceTest {
     @Test
     @DisplayName("비밀번호 변경 실패 - 현재 비밀번호 불일치")
     void updatePasswordFailWithWrongCurrentPassword() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
         given(passwordEncoder.matches("wrongPassword", ENCODED_PASSWORD)).willReturn(false);
 
         UserUpdatePasswordRequestDto request = mock(UserUpdatePasswordRequestDto.class);
@@ -155,7 +146,7 @@ class UserServiceTest {
     @Test
     @DisplayName("비밀번호 변경 실패 - 새 비밀번호가 현재와 동일")
     void updatePasswordFailWithSamePassword() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
         given(passwordEncoder.matches("currentPassword", ENCODED_PASSWORD)).willReturn(true);
         given(passwordEncoder.matches("currentPassword", ENCODED_PASSWORD)).willReturn(true);
 
@@ -173,19 +164,37 @@ class UserServiceTest {
     // ───────────────────────────────────────────────
 
     @Test
-    @DisplayName("회원 탈퇴 성공 - deletedAt 설정")
+    @DisplayName("회원 탈퇴 성공 - 좋아요 눌렀던 POI가 있으면 poi_rating.likes 차감 후 연관 데이터 정리, 실제 DB 행 삭제(하드 딜리트)")
     void deleteUserSuccess() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userPoiLikeRepository.findContentIdsByUserId(1L)).willReturn(List.of(100L, 200L));
 
         userService.deleteUser(1L, EMAIL, false);
 
-        verify(userRepository).findByIdAndDeletedAtIsNull(1L);
+        verify(refreshTokenRepository).deleteByUser(mockUser);
+        verify(poiRatingRepository).decrementLikesForContentIds(List.of(100L, 200L));
+        verify(userPoiLikeRepository).deleteByUserId(1L);
+        verify(tourCourseUserDefinedRepository).unassignAllByUserId(1L);
+        verify(userRepository).delete(mockUser);
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 성공 - 좋아요 누른 POI가 없으면 likes 차감 쿼리를 호출하지 않음")
+    void deleteUserSuccessWithNoLikedPois() {
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userPoiLikeRepository.findContentIdsByUserId(1L)).willReturn(List.of());
+
+        userService.deleteUser(1L, EMAIL, false);
+
+        verify(poiRatingRepository, never()).decrementLikesForContentIds(any());
+        verify(userPoiLikeRepository).deleteByUserId(1L);
+        verify(userRepository).delete(mockUser);
     }
 
     @Test
     @DisplayName("회원 탈퇴 실패 - 존재하지 않는 유저")
     void deleteUserFailWithNotFound() {
-        given(userRepository.findByIdAndDeletedAtIsNull(999L)).willReturn(Optional.empty());
+        given(userRepository.findById(999L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> userService.deleteUser(999L, EMAIL, false))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -199,7 +208,7 @@ class UserServiceTest {
     @Test
     @DisplayName("회원 정보 조회 성공 - 본인 조회")
     void getUserSuccess() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         UserInfoResponseDto result = userService.getUser(1L, EMAIL, false);
 
@@ -213,7 +222,7 @@ class UserServiceTest {
     @Test
     @DisplayName("닉네임 수정 성공 - 본인 수정")
     void updateNicknameSuccess() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         UserUpdateNicknameRequestDto request = mock(UserUpdateNicknameRequestDto.class);
         given(request.getNickname()).willReturn("새닉네임");
@@ -230,7 +239,7 @@ class UserServiceTest {
     @Test
     @DisplayName("보안 실패 - 다른 유저 이메일로 회원 정보 조회 시도 시 403(AccessDeniedException)")
     void getUserFailWithOtherUsersEmail() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         assertThatThrownBy(() -> userService.getUser(1L, OTHER_EMAIL, false))
                 .isInstanceOf(AccessDeniedException.class)
@@ -240,7 +249,7 @@ class UserServiceTest {
     @Test
     @DisplayName("공격 방어 - 다른 유저 닉네임을 임의로 변경 시도 시 차단되고 실제 값은 변경되지 않음")
     void updateNicknameAttackAttemptBlocked() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         UserUpdateNicknameRequestDto request = mock(UserUpdateNicknameRequestDto.class);
 
@@ -253,21 +262,21 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("공격 방어 - 다른 유저 계정을 임의로 탈퇴시키는 시도 차단, deletedAt 변경 없음")
+    @DisplayName("공격 방어 - 다른 유저 계정을 임의로 탈퇴시키는 시도 차단, 실제 삭제 미실행")
     void deleteUserAttackAttemptBlocked() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         assertThatThrownBy(() -> userService.deleteUser(1L, OTHER_EMAIL, false))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("본인 계정만 탈퇴할 수 있습니다.");
 
-        assertThat(mockUser.getDeletedAt()).isNull();
+        verify(userRepository, never()).delete(any());
     }
 
     @Test
     @DisplayName("ADMIN 예외 - 다른 유저 이메일이어도 ADMIN이면 조회/수정/탈퇴 허용")
     void adminBypassesOwnershipCheck() {
-        given(userRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(mockUser));
+        given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         UserInfoResponseDto result = userService.getUser(1L, OTHER_EMAIL, true);
 

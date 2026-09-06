@@ -55,7 +55,7 @@ public class KakaoOAuthService {
         }
 
         String email = userInfo.getEmail();
-        return userRepository.findByEmailAndDeletedAtIsNull(email)
+        return userRepository.findByEmail(email)
                 .map(existing -> {
                     log.info("기존 로컬 계정에 카카오 연결: email={}", email);
                     existing.linkKakao(providerId);
@@ -68,8 +68,8 @@ public class KakaoOAuthService {
     }
 
     private AuthTokenResult issueJwtTokens(User user) {
-        String accessToken = jwtProvider.generateAccessToken(user.getEmail(), user.getRole());
-        String refreshToken = jwtProvider.generateRefreshToken(user.getEmail(), user.getRole());
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId(), user.getEmail(), user.getRole());
 
         refreshTokenRepository.findByUserAndProvider(user, PROVIDER)
                 .ifPresentOrElse(
