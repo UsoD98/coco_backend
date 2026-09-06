@@ -96,6 +96,15 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.of(499, ex.getMessage(), detail));
     }
 
+    // TourAPI가 재시도 소진 후에도 계속 실패하는 경우 — 정상적인 "결과 없음"과 구분해 503으로 응답한다
+    @ExceptionHandler(TourApiUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTourApiUnavailableException(TourApiUnavailableException ex) {
+        log.error("TourAPI unavailable: {}", ex.getMessage(), ex);
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.of(503, "관광 정보 서비스에 일시적으로 연결할 수 없습니다", null));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {
         log.error("Runtime error: {}", ex.getMessage(), ex);

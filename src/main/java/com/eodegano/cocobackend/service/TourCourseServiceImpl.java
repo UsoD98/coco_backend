@@ -33,7 +33,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+
+import static com.eodegano.cocobackend.util.CompletableFutures.joinUnwrapped;
 
 /**
  * v0.5.0 — 로컬 tour/detail 테이블 대신 TourAPI 라이브 조회({@link TourLiveDataService}, Caffeine 캐시 TTL 6h)를 사용.
@@ -55,6 +60,10 @@ public class TourCourseServiceImpl implements TourCourseService {
     // PUBLIC_TRANSPORT: 환승/대기 포함 실효 평균속도 약 25km/h 가정 -> 최대 50km
     private static final double TRANSIT_MAX_LEG_KM = 50.0;
     private static final double TRANSIT_CLUSTER_RADIUS_KM = 25.0;
+
+    // buildDetailMap의 장소별 POI 상세 조회를 병렬화 — 실제 동시 TourAPI HTTP 요청 수는
+    // TourApiClient의 Semaphore(4)로 여전히 제한된다. 캐시 히트는 이 스레드 전환 없이도 저렴하다.
+    private final ExecutorService detailFetchExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     private static final int QUOTA_FOOD          = MEALS_PER_DAY * MAX_TRIP_DAYS;
     private static final int QUOTA_ACCOMMODATION =  4;
@@ -96,8 +105,9 @@ public class TourCourseServiceImpl implements TourCourseService {
 
         String placesData = fetchPlacesData(request.getSigunguCodes(), request.getTransport());
         String userRequest = buildUserRequest(request);
-        TourCourseAiResponseDto aiResponse = groqApiClient.generateTourCourse(placesData, userRequest);
-        validateAiResponse(aiResponse, request.getStartDate(), request.getEndDate(), request.getTransport());
+        TourCourseAiResponseDto rawAiResponse = groqApiClient.generateTourCourse(placesData, userRequest);
+        TourCourseAiResponseDto aiResponse = validateAndCorrectAiResponse(
+                rawAiResponse, request.getStartDate(), request.getEndDate(), request.getTransport());
         TourCourseUserDefined savedCourse = saveTourCourse(request, userId, aiResponse);
         return buildGenerateResponse(savedCourse.getId(), savedCourse.getTitle(), aiResponse);
     }
@@ -167,17 +177,17 @@ public class TourCourseServiceImpl implements TourCourseService {
     @Override
     @Transactional
     public void assignCourse(Long courseId, String userEmail) {
-        TourCourseUserDefined course = tourCourseUserDefinedRepository.findById(courseId)
+        tourCourseUserDefinedRepository.findById(courseId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다"));
-
-        if (course.getUserId() != null) {
-            throw new AccessDeniedException("이미 소유자가 있는 코스입니다");
-        }
 
         User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
-        course.assignUser(user.getId());
+        // userId IS NULL 조건부 UPDATE — 동시 요청 중 하나만 영향 행 1건을 받아 배정에 성공한다 (lost update 방지)
+        int updated = tourCourseUserDefinedRepository.assignUserIfUnassigned(courseId, user.getId());
+        if (updated == 0) {
+            throw new AccessDeniedException("이미 소유자가 있는 코스입니다");
+        }
     }
 
     @Override
@@ -252,6 +262,10 @@ public class TourCourseServiceImpl implements TourCourseService {
             }
         }
 
+        // v0.5.0: 로컬 DB 조회 대신, 요청 내에서 이미 확보한 TourAPI 후보 리스트(캐시)와 메모리 대조.
+        // contentId는 서버가 이전에 검증해서 내려준 값을 프론트가 그대로 되돌려보내는 구조라
+        // type이 실제 contentTypeId와 어긋날 일이 없다고 보고, 존재 여부만 확인한다
+        // (AI 생성 경로와 달리 타입 대조는 하지 않음 — AI 응답은 validateAiResponse에서 자체 보정).
         Set<Long> knownContentIds = tourLiveDataService.getAllCandidates().stream()
                 .map(PoiSummary::contentId)
                 .collect(Collectors.toSet());
@@ -370,13 +384,25 @@ public class TourCourseServiceImpl implements TourCourseService {
     }
 
     private Map<Long, PoiDetail> buildDetailMap(Map<String, List<Long>> contentIdsByType) {
-        Map<Long, PoiDetail> result = new HashMap<>();
+        List<CompletableFuture<Map.Entry<Long, PoiDetail>>> futures = new ArrayList<>();
         contentIdsByType.forEach((typeName, ids) -> {
             Integer contentTypeId = resolveContentTypeId(typeName);
-            for (Long id : ids) {
-                result.put(id, tourLiveDataService.getDetail(id, contentTypeId));
+            // 같은 장소가 스케줄에 여러 번 등장할 수 있음(숙소 연박, 같은 식당 재방문 등).
+            // 병렬 호출 전에 중복 제거하지 않으면 같은 contentId에 대한 캐시 미스가 동시에
+            // 발생해 TourAPI에 같은 요청이 중복으로 나갈 수 있어 Set으로 정리한다
+            // (반환되는 detailMap은 어차피 contentId당 값 하나라 결과 손실 없음).
+            for (Long id : new LinkedHashSet<>(ids)) {
+                futures.add(CompletableFuture.supplyAsync(
+                        () -> Map.entry(id, tourLiveDataService.getDetail(id, contentTypeId)),
+                        detailFetchExecutor));
             }
         });
+
+        Map<Long, PoiDetail> result = new HashMap<>();
+        for (CompletableFuture<Map.Entry<Long, PoiDetail>> future : futures) {
+            Map.Entry<Long, PoiDetail> entry = joinUnwrapped(future);
+            result.put(entry.getKey(), entry.getValue());
+        }
         return result;
     }
 
@@ -705,8 +731,13 @@ public class TourCourseServiceImpl implements TourCourseService {
         );
     }
 
-    private void validateAiResponse(TourCourseAiResponseDto aiResponse, LocalDate startDate, LocalDate endDate,
-                                     TransportType transport) {
+    /**
+     * AI 응답을 검증하고, {@code type}을 TourAPI 공공데이터(실제 contentTypeId) 기준으로 보정한
+     * 새 {@link TourCourseAiResponseDto}를 반환한다. DTO를 불변으로 유지하기 위해 원본을 수정하지
+     * 않고 (필요한 place만) 새 인스턴스로 교체한 복사본을 만든다.
+     */
+    private TourCourseAiResponseDto validateAndCorrectAiResponse(
+            TourCourseAiResponseDto aiResponse, LocalDate startDate, LocalDate endDate, TransportType transport) {
         if (aiResponse == null || aiResponse.getSchedule() == null || aiResponse.getSchedule().isEmpty()) {
             throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
                     "AI 응답이 비어있습니다", true);
@@ -714,6 +745,10 @@ public class TourCourseServiceImpl implements TourCourseService {
 
         Set<Long> contentIds = new HashSet<>();
         for (TourCourseAiResponseDto.DailyPlan day : aiResponse.getSchedule()) {
+            if (day.getDate() == null) {
+                throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
+                        "AI가 생성한 일정에 날짜가 누락되었습니다", true);
+            }
             if (day.getPlaces() != null) {
                 for (TourCourseAiResponseDto.PlaceVisit place : day.getPlaces()) {
                     contentIds.add(place.getContentId());
@@ -721,13 +756,6 @@ public class TourCourseServiceImpl implements TourCourseService {
                     if (day.getDate().isBefore(startDate) || day.getDate().isAfter(endDate)) {
                         throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
                                 "AI가 생성한 일정 날짜가 요청 범위를 벗어났습니다: " + day.getDate(), true);
-                    }
-
-                    try {
-                        PlaceType.valueOf(place.getType());
-                    } catch (IllegalArgumentException e) {
-                        throw new AiCourseGenerationException(ErrorCode.RESPONSE_VALIDATION_FAILED,
-                                "AI가 유효하지 않은 장소 타입을 생성했습니다: " + place.getType(), true);
                     }
                 }
             }
@@ -746,13 +774,48 @@ public class TourCourseServiceImpl implements TourCourseService {
                     "AI가 존재하지 않는 장소 ID를 생성했습니다", true);
         }
 
+        // AI가 붙인 type은 참고용 추정치일 뿐 신뢰할 수 없으므로(null·오탈자·실제와 다른 라벨 등),
+        // TourAPI 공공데이터로 확인된 실제 contentTypeId를 기준으로 항상 보정한다.
+        // 이렇게 하면 type이 null이거나 유효하지 않은 값이어도 실패 없이 정상 처리된다.
+        Map<Long, Integer> actualTypeByContentId = tourLiveDataService.getAllCandidates().stream()
+                .collect(Collectors.toMap(PoiSummary::contentId, PoiSummary::contentTypeId, (a, b) -> a));
+
+        TourCourseAiResponseDto corrected = correctPlaceTypes(aiResponse, actualTypeByContentId);
+
         if (transport != TransportType.WALK) {
-            validateTravelDistances(aiResponse, transport);
+            validateTravelDistances(corrected, transport);
         }
 
-        validateNoAccommodationOnLastDay(aiResponse, endDate);
+        validateNoAccommodationOnLastDay(corrected, endDate);
 
         log.info("AI response validation successful");
+        return corrected;
+    }
+
+    private TourCourseAiResponseDto correctPlaceTypes(TourCourseAiResponseDto aiResponse,
+                                                        Map<Long, Integer> actualTypeByContentId) {
+        List<TourCourseAiResponseDto.DailyPlan> correctedSchedule = aiResponse.getSchedule().stream()
+                .map(day -> {
+                    if (day.getPlaces() == null) return day;
+                    List<TourCourseAiResponseDto.PlaceVisit> correctedPlaces = day.getPlaces().stream()
+                            .map(place -> {
+                                Integer actualTypeId = actualTypeByContentId.get(place.getContentId());
+                                String actualTypeName = PlaceType.fromContentTypeId(actualTypeId).name();
+                                if (actualTypeName.equals(place.getType())) {
+                                    return place;
+                                }
+                                log.warn("장소 타입 보정: contentId={}, AI claimed type={} -> 실제 contentTypeId({}) 기준 {}로 보정",
+                                        place.getContentId(), place.getType(), actualTypeId, actualTypeName);
+                                return new TourCourseAiResponseDto.PlaceVisit(
+                                        place.getSeq(), place.getTime(), actualTypeName,
+                                        place.getContentId(), place.getDurationMinutes());
+                            })
+                            .collect(Collectors.toList());
+                    return new TourCourseAiResponseDto.DailyPlan(day.getDate(), correctedPlaces);
+                })
+                .collect(Collectors.toList());
+
+        return new TourCourseAiResponseDto(correctedSchedule);
     }
 
     /**

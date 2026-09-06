@@ -1,5 +1,6 @@
 package com.eodegano.cocobackend.dataMig.service;
 
+import com.eodegano.cocobackend.exception.TourApiUnavailableException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+
+import static com.eodegano.cocobackend.util.CompletableFutures.joinUnwrapped;
 
 /**
  * 한국관광공사 TourAPI v2 호출 클라이언트
@@ -151,7 +154,7 @@ public class TourApiClient {
                         pageFetchExecutor));
             }
             for (CompletableFuture<List<JsonNode>> future : futures) {
-                results.addAll(future.join());
+                results.addAll(joinUnwrapped(future));
             }
         }
 
@@ -176,7 +179,7 @@ public class TourApiClient {
         }
 
         Map<Integer, List<JsonNode>> result = new LinkedHashMap<>();
-        futures.forEach((typeId, future) -> result.put(typeId, future.join()));
+        futures.forEach((typeId, future) -> result.put(typeId, joinUnwrapped(future)));
         return result;
     }
 
@@ -242,6 +245,12 @@ public class TourApiClient {
                     sleepQuietly(RETRY_BASE_DELAY_MS * attempt);
                     continue;
                 }
+                if (retryable) {
+                    // 재시도 소진 — 정상 "0건" 응답과 구분해야 하므로 빈 노드 대신 전용 예외를 던진다
+                    log.error("API 호출 재시도 소진: uri={}, status={}", uri, status);
+                    throw new TourApiUnavailableException(
+                            "TourAPI 호출이 재시도 소진 후 실패했습니다 (status=" + status + ")", e);
+                }
                 log.error("API 호출 오류: uri={}, status={}, error={}", uri, status, e.getMessage());
                 return objectMapper.createObjectNode();
 
@@ -251,8 +260,9 @@ public class TourApiClient {
                     sleepQuietly(RETRY_BASE_DELAY_MS * attempt);
                     continue;
                 }
-                log.error("API 호출 오류: uri={}, error={}", uri, e.getMessage());
-                return objectMapper.createObjectNode();
+                log.error("API 호출 재시도 소진: uri={}, error={}", uri, e.getMessage());
+                throw new TourApiUnavailableException(
+                        "TourAPI 호출이 재시도 소진 후 실패했습니다", e);
 
             } finally {
                 requestThrottle.release();

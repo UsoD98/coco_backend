@@ -195,6 +195,11 @@ public class GroqApiClient {
 
     private TourCourseAiResponseDto parseAiResponse(GroqApiResponseDto response) {
         GroqApiResponseDto.Choice choice = response.getChoices().get(0);
+        if (choice.getMessage() == null || choice.getMessage().getContent() == null) {
+            log.error("Groq 응답에 message/content가 없습니다 (finishReason={})", choice.getFinish_reason());
+            throw new AiCourseGenerationException(ErrorCode.RESPONSE_PARSE_FAILED,
+                    "AI 응답에 콘텐츠가 없습니다", true, choice.getFinish_reason(), null);
+        }
         String content = choice.getMessage().getContent();
 
         try {

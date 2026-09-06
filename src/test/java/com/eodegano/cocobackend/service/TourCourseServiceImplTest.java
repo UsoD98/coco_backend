@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /** GBC020 코스 수정 단위 테스트 */
@@ -283,6 +284,32 @@ class TourCourseServiceImplTest {
     }
 
     @Test
+    @DisplayName("성공 - 같은 장소가 여러 날 반복 등장해도(숙소 연박 등) 상세 조회는 한 번만 호출되고 양쪽 날짜에 정상 반영됨")
+    void generateTourCourseDedupesRepeatedContentIdInDetailFetch() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+
+        TourCourseAiResponseDto.PlaceVisit day1Place =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+        TourCourseAiResponseDto.PlaceVisit day2Place =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+        TourCourseAiResponseDto.DailyPlan day1 = new TourCourseAiResponseDto.DailyPlan(START_DATE, List.of(day1Place));
+        TourCourseAiResponseDto.DailyPlan day2 = new TourCourseAiResponseDto.DailyPlan(END_DATE, List.of(day2Place));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(new TourCourseAiResponseDto(List.of(day1, day2)));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        TourCourseGenerateResponseDto result =
+                tourCourseService.generateTourCourse(validGenerateRequest(), null);
+
+        verify(tourLiveDataService, times(1)).getDetail(100L, 12);
+        assertThat(result.getSchedule()).hasSize(2);
+        assertThat(result.getSchedule().get(0).getPlaces().get(0).getOperatingHours()).isEqualTo("상시 개방");
+        assertThat(result.getSchedule().get(1).getPlaces().get(0).getOperatingHours()).isEqualTo("상시 개방");
+    }
+
+    @Test
     @DisplayName("성공 - sigunguCodes를 시군구명으로 변환해 기본 제목을 생성하고 저장함")
     void generateTourCourseBuildsDefaultTitleFromSigunguCodes() {
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
@@ -380,12 +407,14 @@ class TourCourseServiceImplTest {
     @Test
     @DisplayName("실패 - 마지막 날(체크아웃일)에 ACCOMMODATION이 포함됨 → AiCourseGenerationException(RESPONSE_VALIDATION_FAILED)")
     void generateTourCourseFailWhenAccommodationOnLastDay() {
-        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        PoiSummary accommodationCandidate = new PoiSummary(200L, 32, "숙소", "http://img.jpg",
+                new BigDecimal("129.0"), new BigDecimal("35.0"), "47130");
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate(), accommodationCandidate));
 
         TourCourseAiResponseDto.PlaceVisit attraction =
                 new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
         TourCourseAiResponseDto.PlaceVisit accommodation =
-                new TourCourseAiResponseDto.PlaceVisit(2, LocalTime.of(21, 0), "ACCOMMODATION", 100L, 0);
+                new TourCourseAiResponseDto.PlaceVisit(2, LocalTime.of(21, 0), "ACCOMMODATION", 200L, 0);
         TourCourseAiResponseDto.DailyPlan lastDay =
                 new TourCourseAiResponseDto.DailyPlan(END_DATE, List.of(attraction, accommodation));
         given(groqApiClient.generateTourCourse(anyString(), anyString()))
@@ -399,5 +428,109 @@ class TourCourseServiceImplTest {
         assertThat(ex.getErrorCode()).isEqualTo(AiCourseGenerationException.ErrorCode.RESPONSE_VALIDATION_FAILED);
         assertThat(ex.isRetryable()).isTrue();
         assertThat(ex.getMessage()).contains("마지막 날");
+    }
+
+    @Test
+    @DisplayName("성공 - AI가 실제 contentTypeId와 다른 type을 생성해도 실패시키지 않고 실제 값으로 보정")
+    void generateTourCourseCorrectsTypeWhenMismatchesActualContentTypeId() {
+        // candidate()는 contentId=100L을 contentTypeId=12(ATTRACTION)로 제공하는데, AI는 같은 contentId를
+        // FOOD(음식점)로 잘못 라벨링 — contentId는 프론트가 검증된 데이터를 그대로 보낸 것과 달리 AI는
+        // 확률적으로 라벨을 잘못 붙일 수 있으므로, 실패시키는 대신 공공데이터(실제 contentTypeId) 기준으로 보정한다.
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+        TourCourseAiResponseDto.PlaceVisit mislabeled =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "FOOD", 100L, 120);
+        TourCourseAiResponseDto.DailyPlan day =
+                new TourCourseAiResponseDto.DailyPlan(START_DATE, List.of(mislabeled));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(new TourCourseAiResponseDto(List.of(day)));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        TourCourseGenerateResponseDto result =
+                tourCourseService.generateTourCourse(validGenerateRequest(), null);
+
+        assertThat(result.getSchedule().get(0).getPlaces().get(0).getType()).isEqualTo("ATTRACTION");
+    }
+
+    @Test
+    @DisplayName("성공 - AI 응답 place의 type이 null이어도 미처리 NPE 없이 실제 값으로 보정")
+    void generateTourCourseCorrectsTypeWhenPlaceTypeIsNull() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+        TourCourseAiResponseDto.PlaceVisit noType =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), null, 100L, 120);
+        TourCourseAiResponseDto.DailyPlan day =
+                new TourCourseAiResponseDto.DailyPlan(START_DATE, List.of(noType));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(new TourCourseAiResponseDto(List.of(day)));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        TourCourseGenerateResponseDto result =
+                tourCourseService.generateTourCourse(validGenerateRequest(), null);
+
+        assertThat(result.getSchedule().get(0).getPlaces().get(0).getType()).isEqualTo("ATTRACTION");
+    }
+
+    @Test
+    @DisplayName("실패 - AI 응답 day의 date가 null → 미처리 NPE 대신 RESPONSE_VALIDATION_FAILED로 처리")
+    void generateTourCourseFailWhenDateIsNull() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        TourCourseAiResponseDto.PlaceVisit place =
+                new TourCourseAiResponseDto.PlaceVisit(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120);
+        TourCourseAiResponseDto.DailyPlan noDateDay =
+                new TourCourseAiResponseDto.DailyPlan(null, List.of(place));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(new TourCourseAiResponseDto(List.of(noDateDay)));
+
+        AiCourseGenerationException ex = catchThrowableOfType(
+                AiCourseGenerationException.class,
+                () -> tourCourseService.generateTourCourse(validGenerateRequest(), null));
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getErrorCode()).isEqualTo(AiCourseGenerationException.ErrorCode.RESPONSE_VALIDATION_FAILED);
+        assertThat(ex.isRetryable()).isTrue();
+        assertThat(ex.getMessage()).contains("날짜가 누락되었습니다");
+    }
+
+    @Test
+    @DisplayName("성공 - 비로그인 코스에 대한 최초 배정 요청은 소유자로 등록됨")
+    void assignCourseSuccess() {
+        given(tourCourseUserDefinedRepository.findById(COURSE_ID))
+                .willReturn(Optional.of(TourCourseUserDefined.builder()
+                        .id(COURSE_ID).userId(null).peopleCount(2)
+                        .startDate(START_DATE).endDate(END_DATE).transport("CAR").theme("[]").build()));
+        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(tourCourseUserDefinedRepository.assignUserIfUnassigned(COURSE_ID, OWNER_ID)).willReturn(1);
+
+        tourCourseService.assignCourse(COURSE_ID, OWNER_EMAIL);
+
+        verify(tourCourseUserDefinedRepository).assignUserIfUnassigned(COURSE_ID, OWNER_ID);
+    }
+
+    @Test
+    @DisplayName("실패 - 동시 배정 경합에서 조건부 UPDATE 영향 행 수가 0(이미 선점됨) → AccessDeniedException(403 매핑)")
+    void assignCourseFailWhenLostRaceToConcurrentAssign() {
+        given(tourCourseUserDefinedRepository.findById(COURSE_ID))
+                .willReturn(Optional.of(TourCourseUserDefined.builder()
+                        .id(COURSE_ID).userId(null).peopleCount(2)
+                        .startDate(START_DATE).endDate(END_DATE).transport("CAR").theme("[]").build()));
+        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        // 동시 요청 중 먼저 커밋된 트랜잭션이 이미 userId를 채워 조건부 UPDATE의 영향 행 수가 0건이 된 상황을 재현
+        given(tourCourseUserDefinedRepository.assignUserIfUnassigned(COURSE_ID, OWNER_ID)).willReturn(0);
+
+        assertThatThrownBy(() -> tourCourseService.assignCourse(COURSE_ID, OWNER_EMAIL))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("이미 소유자가 있는 코스입니다");
+    }
+
+    @Test
+    @DisplayName("실패 - 존재하지 않는 코스 배정 요청 → NoSuchElementException(404 매핑)")
+    void assignCourseFailWithCourseNotFound() {
+        given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tourCourseService.assignCourse(COURSE_ID, OWNER_EMAIL))
+                .isInstanceOf(NoSuchElementException.class);
     }
 }

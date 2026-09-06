@@ -65,7 +65,7 @@ public class TourLiveDataService {
     }
 
     /** POI 개별 상세 (detailIntro2 기반, 타입별 운영시간/비용 원천 필드 매핑) */
-    @Cacheable(cacheNames = CacheConfig.POI_DETAIL_CACHE, key = "#p0")
+    @Cacheable(cacheNames = CacheConfig.POI_DETAIL_CACHE, key = "#p0 + '_' + #p1")
     public PoiDetail getDetail(Long contentId, Integer contentTypeId) {
         if (contentTypeId == null) {
             return new PoiDetail(contentId, null, null, null);
