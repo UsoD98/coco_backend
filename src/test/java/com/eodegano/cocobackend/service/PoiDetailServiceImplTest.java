@@ -144,7 +144,7 @@ class PoiDetailServiceImplTest {
         );
         given(tourLiveDataService.getFullDetail(126289L)).willReturn(detail);
         User user = User.builder().id(1L).email("test@test.com").nickname("tester").build();
-        given(userRepository.findByEmailAndDeletedAtIsNull("test@test.com")).willReturn(Optional.of(user));
+        given(userRepository.findByEmail("test@test.com")).willReturn(Optional.of(user));
         given(userPoiLikeRepository.existsByUserIdAndContentId(1L, 126289L)).willReturn(true);
         given(poiRatingRepository.findById(126289L)).willReturn(Optional.empty());
 
@@ -161,7 +161,7 @@ class PoiDetailServiceImplTest {
                 null, null, List.of()
         );
         given(tourLiveDataService.getFullDetail(126289L)).willReturn(detail);
-        given(userRepository.findByEmailAndDeletedAtIsNull("ghost@test.com")).willReturn(Optional.empty());
+        given(userRepository.findByEmail("ghost@test.com")).willReturn(Optional.empty());
         given(poiRatingRepository.findById(126289L)).willReturn(Optional.empty());
 
         PoiDetailResponseDto result = poiDetailService.getPoiDetail(126289L, "ghost@test.com");

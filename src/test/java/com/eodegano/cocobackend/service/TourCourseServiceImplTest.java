@@ -139,7 +139,7 @@ class TourCourseServiceImplTest {
                 .time(LocalTime.of(9, 0)).durationMinutes(120).type("ATTRACTION").contentId(100L).build();
 
         given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.of(course));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of(
                 new PoiSummary(100L, 12, "상주 감꽃마을 서울시캠핑장", "http://img.jpg",
                         new BigDecimal("129.0"), new BigDecimal("35.0"), "47130")));
@@ -183,7 +183,7 @@ class TourCourseServiceImplTest {
     @DisplayName("실패 - 존재하지 않는 사용자 → NoSuchElementException(404 매핑)")
     void updateCourseFailWithUserNotFound() {
         given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.of(ownedCourse()));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.empty());
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> tourCourseService.updateCourse(COURSE_ID, validRequest(), OWNER_EMAIL))
                 .isInstanceOf(NoSuchElementException.class);
@@ -197,7 +197,7 @@ class TourCourseServiceImplTest {
                 .startDate(START_DATE).endDate(END_DATE).transport("CAR").theme("[]").build();
 
         given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.of(othersCourse));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
 
         assertThatThrownBy(() -> tourCourseService.updateCourse(COURSE_ID, validRequest(), OWNER_EMAIL))
                 .isInstanceOf(AccessDeniedException.class);
@@ -207,7 +207,7 @@ class TourCourseServiceImplTest {
     @DisplayName("실패 - 일정 날짜가 코스 기간을 벗어남 → IllegalArgumentException(400 매핑)")
     void updateCourseFailWithDateOutOfRange() {
         given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.of(ownedCourse()));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
 
         TourCourseUpdateRequestDto.PlaceUpdate place =
                 new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "ATTRACTION", 100L, 120, 5000);
@@ -224,7 +224,7 @@ class TourCourseServiceImplTest {
     @DisplayName("실패 - 유효하지 않은 장소 타입 → IllegalArgumentException(400 매핑)")
     void updateCourseFailWithInvalidType() {
         given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.of(ownedCourse()));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
 
         TourCourseUpdateRequestDto.PlaceUpdate place =
                 new TourCourseUpdateRequestDto.PlaceUpdate(1, LocalTime.of(9, 0), "INVALID_TYPE", 100L, 120, 5000);
@@ -241,7 +241,7 @@ class TourCourseServiceImplTest {
     @DisplayName("실패 - TourAPI 후보에 없는 contentId → IllegalArgumentException(400 매핑)")
     void updateCourseFailWithUnknownContentId() {
         given(tourCourseUserDefinedRepository.findById(COURSE_ID)).willReturn(Optional.of(ownedCourse()));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
         given(tourLiveDataService.getAllCandidates()).willReturn(List.of());
 
         assertThatThrownBy(() -> tourCourseService.updateCourse(COURSE_ID, validRequest(), OWNER_EMAIL))
@@ -501,7 +501,7 @@ class TourCourseServiceImplTest {
                 .willReturn(Optional.of(TourCourseUserDefined.builder()
                         .id(COURSE_ID).userId(null).peopleCount(2)
                         .startDate(START_DATE).endDate(END_DATE).transport("CAR").theme("[]").build()));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
         given(tourCourseUserDefinedRepository.assignUserIfUnassigned(COURSE_ID, OWNER_ID)).willReturn(1);
 
         tourCourseService.assignCourse(COURSE_ID, OWNER_EMAIL);
@@ -516,7 +516,7 @@ class TourCourseServiceImplTest {
                 .willReturn(Optional.of(TourCourseUserDefined.builder()
                         .id(COURSE_ID).userId(null).peopleCount(2)
                         .startDate(START_DATE).endDate(END_DATE).transport("CAR").theme("[]").build()));
-        given(userRepository.findByEmailAndDeletedAtIsNull(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
         // 동시 요청 중 먼저 커밋된 트랜잭션이 이미 userId를 채워 조건부 UPDATE의 영향 행 수가 0건이 된 상황을 재현
         given(tourCourseUserDefinedRepository.assignUserIfUnassigned(COURSE_ID, OWNER_ID)).willReturn(0);
 

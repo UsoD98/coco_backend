@@ -69,7 +69,7 @@ public class PoiCurationServiceImpl implements PoiCurationService {
         if (userEmail == null || contentIds.isEmpty()) {
             return Set.of();
         }
-        return userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        return userRepository.findByEmail(userEmail)
                 .map(user -> (Set<Long>) new HashSet<>(userPoiLikeRepository.findContentIdsByUserIdAndContentIdIn(user.getId(), contentIds)))
                 .orElseGet(Set::of);
     }

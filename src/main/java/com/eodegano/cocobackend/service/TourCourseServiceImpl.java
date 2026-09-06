@@ -96,7 +96,7 @@ public class TourCourseServiceImpl implements TourCourseService {
     @Transactional
     public TourCourseGenerateResponseDto generateTourCourse(TourCourseGenerateRequestDto request, String email) {
         Long userId = (email != null)
-                ? userRepository.findByEmailAndDeletedAtIsNull(email)
+                ? userRepository.findByEmail(email)
                         .map(u -> u.getId())
                         .orElse(null)
                 : null;
@@ -123,7 +123,7 @@ public class TourCourseServiceImpl implements TourCourseService {
     @Override
     @Transactional(readOnly = true)
     public List<TourCourseListItemDto> getCourseList(String userEmail) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         return tourCourseUserDefinedRepository.findByUserId(user.getId()).stream()
@@ -146,7 +146,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         TourCourseUserDefined course = tourCourseUserDefinedRepository.findById(courseId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다"));
 
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         if (!user.getId().equals(course.getUserId())) {
@@ -162,7 +162,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         TourCourseUserDefined course = tourCourseUserDefinedRepository.findById(courseId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다"));
 
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         if (!user.getId().equals(course.getUserId())) {
@@ -180,7 +180,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         tourCourseUserDefinedRepository.findById(courseId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다"));
 
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         // userId IS NULL 조건부 UPDATE — 동시 요청 중 하나만 영향 행 1건을 받아 배정에 성공한다 (lost update 방지)
@@ -196,7 +196,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         TourCourseUserDefined course = tourCourseUserDefinedRepository.findById(courseId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다: " + courseId));
 
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         if (!user.getId().equals(course.getUserId())) {
@@ -212,7 +212,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         TourCourseUserDefined course = tourCourseUserDefinedRepository.findById(courseId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 코스입니다: " + courseId));
 
-        User user = userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다"));
 
         if (!user.getId().equals(course.getUserId())) {

@@ -41,7 +41,7 @@ public class PoiDetailServiceImpl implements PoiDetailService {
         if (userEmail == null) {
             return false;
         }
-        return userRepository.findByEmailAndDeletedAtIsNull(userEmail)
+        return userRepository.findByEmail(userEmail)
                 .map(user -> userPoiLikeRepository.existsByUserIdAndContentId(user.getId(), contentId))
                 .orElse(false);
     }

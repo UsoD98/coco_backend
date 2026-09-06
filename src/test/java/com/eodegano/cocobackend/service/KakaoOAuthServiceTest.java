@@ -50,8 +50,8 @@ class KakaoOAuthServiceTest {
     }
 
     private void lenientJwtStubs() {
-        lenient().when(jwtProvider.generateAccessToken(any(), any())).thenReturn(ACCESS_TOKEN);
-        lenient().when(jwtProvider.generateRefreshToken(any(), any())).thenReturn(REFRESH_TOKEN);
+        lenient().when(jwtProvider.generateAccessToken(any(), any(), any())).thenReturn(ACCESS_TOKEN);
+        lenient().when(jwtProvider.generateRefreshToken(any(), any(), any())).thenReturn(REFRESH_TOKEN);
         lenient().when(jwtProvider.getRefreshTokenExpiresAt()).thenReturn(LocalDateTime.now().plusDays(7));
         lenient().when(refreshTokenRepository.findByUserAndProvider(any(User.class), eq("kakao")))
                 .thenReturn(Optional.empty());
@@ -70,7 +70,7 @@ class KakaoOAuthServiceTest {
         AuthTokenResult result = kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
 
         assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
-        verify(userRepository, never()).findByEmailAndDeletedAtIsNull(any());
+        verify(userRepository, never()).findByEmail(any());
         verify(userRepository, never()).save(any());
     }
 
@@ -86,7 +86,7 @@ class KakaoOAuthServiceTest {
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(userInfo);
         given(userRepository.findByProviderAndProviderId("kakao", "111")).willReturn(Optional.empty());
-        given(userRepository.findByEmailAndDeletedAtIsNull("local@example.com"))
+        given(userRepository.findByEmail("local@example.com"))
                 .willReturn(Optional.of(localUser));
 
         AuthTokenResult result = kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -107,7 +107,7 @@ class KakaoOAuthServiceTest {
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(userInfo);
         given(userRepository.findByProviderAndProviderId("kakao", "222")).willReturn(Optional.empty());
-        given(userRepository.findByEmailAndDeletedAtIsNull("new@example.com")).willReturn(Optional.empty());
+        given(userRepository.findByEmail("new@example.com")).willReturn(Optional.empty());
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -134,7 +134,7 @@ class KakaoOAuthServiceTest {
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
 
         // 피해자 계정 조회 자체가 발생하면 안 됨
-        verify(userRepository, never()).findByEmailAndDeletedAtIsNull(any());
+        verify(userRepository, never()).findByEmail(any());
         verify(victimAccount, never()).linkKakao(any());
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
@@ -157,7 +157,7 @@ class KakaoOAuthServiceTest {
 
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
 
-        verify(userRepository, never()).findByEmailAndDeletedAtIsNull(any());
+        verify(userRepository, never()).findByEmail(any());
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         assertThat(captor.getValue().getEmail()).isEqualTo("kakao_777@kakao.local");
@@ -206,7 +206,7 @@ class KakaoOAuthServiceTest {
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(realUserInfo);
         given(userRepository.findByProviderAndProviderId("kakao", "1001")).willReturn(Optional.empty());
-        given(userRepository.findByEmailAndDeletedAtIsNull("real@example.com"))
+        given(userRepository.findByEmail("real@example.com"))
                 .willReturn(Optional.of(localUser));
 
         AuthTokenResult result = kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -237,7 +237,7 @@ class KakaoOAuthServiceTest {
         AuthTokenResult result = kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
 
         assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
-        verify(userRepository, never()).findByEmailAndDeletedAtIsNull(any());
+        verify(userRepository, never()).findByEmail(any());
         verify(victimAccount, never()).linkKakao(any());
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
@@ -268,7 +268,7 @@ class KakaoOAuthServiceTest {
 
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
 
-        verify(userRepository, never()).findByEmailAndDeletedAtIsNull(any());
+        verify(userRepository, never()).findByEmail(any());
         verify(victimAccount, never()).linkKakao(any());
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);

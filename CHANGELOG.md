@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-09-06
+
+### Changed
+
+#### 회원 탈퇴 소프트 딜리트 → 하드 딜리트 전환
+
+`User.deletedAt`/`rejoin()` 등 소프트 딜리트 스캐폴딩을 전부 제거하고,
+`UserServiceImpl.deleteUser()`가 실제 DB 행을 삭제하도록 재작성.
+
+- FK로 `user`를 참조하는 데이터를 먼저 정리한 뒤 `user` 행을 하드 삭제:
+  `refresh_token` 삭제, `user_poi_like` 삭제(+ 삭제 전 좋아요 누른
+  `contentId` 목록을 조회해 `poi_rating.likes`를 그만큼 차감), `tour_course_user_defined`는
+  삭제하지 않고 `userId`만 `null`로 되돌려 비로그인 생성 코스와 동일하게 유지
+- 재가입(탈퇴 이력이 있으면 기존 계정을 살리는) 로직 삭제 — 하드 딜리트로 탈퇴
+  이력 자체가 남지 않으므로 무의미해짐. `join()`은 항상 신규 insert만 수행
+- `findByEmailAndDeletedAtIsNull` 등 deletedAt 조건부 조회 메서드를 전부
+  `findByEmail`/`existsByEmail`/`findById`로 교체 (Auth, Kakao OAuth, POI
+  상세/큐레이션/좋아요, TourCourse, UserDetails 전 서비스 반영)
+
+### Added
+
+#### JWT 클레임에 userId 추가
+
+FE가 액세스 토큰을 디코딩해 별도 조회 없이 회원 ID를 바로 쓸 수 있도록,
+`JwtProvider.generateAccessToken`/`generateRefreshToken`이 `userId`를 받아
+payload에 `userId` 클레임으로 싣게 변경 (`sub`는 기존대로 email 유지).
+로그인·재발급·카카오 로그인 등 토큰 발급 지점 전체 반영.
+
+### Testing
+
+#### 위 변경사항 테스트 갱신
+
+`UserServiceTest`의 재가입 테스트를 삭제하고 하드 삭제(연관 데이터 정리 +
+좋아요 있는/없는 케이스) 검증으로 재작성, 공격 방어 테스트도 `delete()` 미호출
+검증으로 변경. `JwtProviderTest`에 실제 토큰 payload를 base64 디코딩해
+`userId` 클레임을 확인하는 테스트 추가. 나머지 영향받은 서비스 테스트는
+메서드명 변경에 맞춰 갱신. 전체 테스트 통과 확인.
+
+### Files Changed (22 files)
+
+- `src/main/java/com/eodegano/cocobackend/domain/User.java`
+- `src/main/java/com/eodegano/cocobackend/repository/PoiRatingRepository.java`
+- `src/main/java/com/eodegano/cocobackend/repository/TourCourseUserDefinedRepository.java`
+- `src/main/java/com/eodegano/cocobackend/repository/UserPoiLikeRepository.java`
+- `src/main/java/com/eodegano/cocobackend/repository/UserRepository.java`
+- `src/main/java/com/eodegano/cocobackend/security/JwtProvider.java`
+- `src/main/java/com/eodegano/cocobackend/service/AuthService.java`
+- `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiCurationServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiDetailServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/PoiLikeServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/UserDetailsServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/UserServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/security/JwtProviderTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/AuthServiceTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/KakaoOAuthServiceTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiCurationServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiDetailServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/PoiLikeServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/UserServiceTest.java`
+
 ## [0.8.2] - 2026-09-06
 
 ### Fixed

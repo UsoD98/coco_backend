@@ -19,4 +19,9 @@ public interface PoiRatingRepository extends JpaRepository<PoiRating, Long> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE PoiRating p SET p.likes = CASE WHEN COALESCE(p.likes, 0) > 0 THEN COALESCE(p.likes, 0) - 1 ELSE 0 END WHERE p.contentid = :contentId")
     void decrementLikes(@Param("contentId") Long contentId);
+
+    // 회원 탈퇴(하드 삭제) 시 해당 유저가 눌렀던 좋아요 수만큼 일괄 차감
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE PoiRating p SET p.likes = CASE WHEN COALESCE(p.likes, 0) > 0 THEN COALESCE(p.likes, 0) - 1 ELSE 0 END WHERE p.contentid IN :contentIds")
+    void decrementLikesForContentIds(@Param("contentIds") List<Long> contentIds);
 }
