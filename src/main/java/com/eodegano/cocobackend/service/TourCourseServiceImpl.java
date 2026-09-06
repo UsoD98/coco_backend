@@ -169,8 +169,11 @@ public class TourCourseServiceImpl implements TourCourseService {
             throw new AccessDeniedException("해당 코스를 삭제할 권한이 없습니다");
         }
 
+        // deleteAll은 영속성 컨텍스트에 REMOVE로만 등록되므로, flush 없이 두면
+        // 커밋 시점 단일 flush에서 course 삭제와 순서가 뒤바뀌어 FK 위반이 날 수 있어 즉시 flush
         tourCourseUserDefinedDetailRepository.deleteAll(
                 tourCourseUserDefinedDetailRepository.findByTourCourseId(courseId));
+        tourCourseUserDefinedDetailRepository.flush();
         tourCourseUserDefinedRepository.delete(course);
     }
 

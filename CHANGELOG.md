@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-09-06
+
+### Fixed
+
+#### 회원 탈퇴 시 자식 데이터 미삭제로 인한 FK 위반 수정
+
+0.8.3 하드 딜리트 전환 후 배포 환경에서 회원 탈퇴가 `refresh_token`
+FK 제약 위반(`DataIntegrityViolationException`)으로 실패. 단위 테스트는
+리포지토리를 mock 처리해 통과했지만, 실제로는 JPA의 파생 삭제 쿼리
+(`deleteBy...`)와 `deleteAll`이 엔티티를 영속성 컨텍스트에 REMOVE로만
+등록할 뿐 즉시 flush하지 않아, 트랜잭션 커밋 시점의 단일 flush에서
+부모 행 삭제와 순서가 뒤바뀔 수 있는 것이 원인.
+
+- `UserServiceImpl.deleteUser()`: `refreshTokenRepository.deleteByUser()`,
+  `userPoiLikeRepository.deleteByUserId()` 각각 직후 `.flush()` 추가
+- `TourCourseServiceImpl.deleteCourse()`: `tourCourseUserDefinedDetailRepository.deleteAll()`
+  직후 `.flush()` 추가 (같은 클래스의 `updateCourse()`는 이미 이 패턴 적용돼 있었음)
+- 벌크 `@Modifying` 쿼리(`unassignAllByUserId`, `decrementLikes*`)는 즉시
+  실행되므로 영향 없음을 확인
+
+### Files Changed (2 files)
+
+- `src/main/java/com/eodegano/cocobackend/service/UserServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+
 ## [0.8.3] - 2026-09-06
 
 ### Changed

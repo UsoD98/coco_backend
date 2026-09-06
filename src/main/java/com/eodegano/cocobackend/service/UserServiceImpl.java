@@ -92,13 +92,18 @@ public class UserServiceImpl implements UserService {
         verifyOwnership(user, requesterEmail, isAdmin, "본인 계정만 탈퇴할 수 있습니다.");
 
         // FK로 user를 참조하는 데이터 먼저 정리 후 실제 DB 행 삭제 (하드 딜리트)
+        // deleteByUser는 영속성 컨텍스트에 REMOVE로만 등록되므로, flush 없이 두면
+        // 커밋 시점 단일 flush에서 user 삭제와 순서가 뒤바뀌어 FK 위반이 날 수 있어 즉시 flush
         refreshTokenRepository.deleteByUser(user);
+        refreshTokenRepository.flush();
 
         List<Long> likedContentIds = userPoiLikeRepository.findContentIdsByUserId(userId);
         if (!likedContentIds.isEmpty()) {
             poiRatingRepository.decrementLikesForContentIds(likedContentIds);
         }
+        // deleteByUserId도 같은 이유로 즉시 flush (user_poi_like.user_id FK)
         userPoiLikeRepository.deleteByUserId(userId);
+        userPoiLikeRepository.flush();
 
         tourCourseUserDefinedRepository.unassignAllByUserId(userId);
         userRepository.delete(user);
