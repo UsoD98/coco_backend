@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-06
+
+### Fixed
+
+#### 백엔드 코드 리뷰 정확성 버그 7건 수정 (#3~#9)
+
+`docs/code_review/2026-09-05_backend-review.md` 항목 3~9 전체 수정. 상세 배경·코드는
+문서 참고.
+
+- TourAPI 재시도 소진 시 빈 결과 대신 `TourApiUnavailableException`(503)을 던져
+  "장애"와 "결과 없음"을 구분 (#3)
+- AI가 생성한 장소 `type`이 실제 contentTypeId와 다르면 실패시키지 않고 TourAPI
+  실제 값으로 조용히 보정 (`validateAndCorrectAiResponse`) — PATCH 요청은 원래대로
+  존재 여부만 검증 (#4)
+- `TourLiveDataService.getDetail` 캐시 키에 contentTypeId 반영 (#5)
+- `assignCourse` 동시 배정 요청 시 lost update 방지 — `UPDATE ... WHERE user_id IS
+  NULL` 조건부 업데이트로 원자적 처리 (#6)
+- Groq 응답의 장소 `type`/일정 `date`/`message`가 null이어도 미처리 NPE(500) 대신
+  명시적 검증 실패(499, retryable) 또는 값 보정으로 처리 (#7 — 4번 로직에 흡수, #8,
+  #9)
+
+### Changed
+
+#### 코스 상세 조회 병렬화 (#10)
+
+`buildDetailMap`의 장소별 TourAPI 상세 조회(`getDetail`)를 가상 스레드 기반
+`CompletableFuture`로 병렬화(실제 동시 TourAPI 호출 수는 기존 `Semaphore(4)`로
+동일하게 제한). 이 과정에서 `future.join()`이 예외를 `CompletionException`으로
+감싸 `GlobalExceptionHandler`가 원래 타입을 인식 못 하는 문제를 발견해,
+`CompletableFutures.joinUnwrapped()` 공용 유틸로 `TourApiClient`(#3)와 함께 정리.
+또한 같은 장소가 스케줄에 여러 번 등장하는 경우(숙소 연박 등) 병렬 호출이 같은
+`contentId`에 대해 TourAPI를 중복 요청할 수 있어, 조회 전 `contentId` 목록을 중복
+제거하도록 보강(응답에 들어가는 스케줄 자체는 영향 없음).
+
+### Testing
+
+#### 위 수정사항 회귀 테스트 추가
+
+`TourCourseServiceImplTest`에 항목별 성공/실패 케이스 추가(타입 보정, null
+date/type, assignCourse 동시성 등). 전체 테스트 통과 확인. TourApiClient/GroqApiClient는
+`RestClient`를 생성자에서 직접 만드는 구조라 기존 인프라로 목킹 불가 — 전용 테스트는
+TODO로 남김.
+
+### Docs
+
+#### 코드 리뷰 체크리스트 항목 3~10 완료 처리
+
+`docs/code_review/2026-09-05_backend-review.md`에 각 항목의 "적용한 수정" 기록,
+전체 10개 항목 완료 처리.
+
+### Files Changed (10 files)
+
+- `src/main/java/com/eodegano/cocobackend/dataMig/service/TourApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/exception/TourApiUnavailableException.java` (신규)
+- `src/main/java/com/eodegano/cocobackend/exception/GlobalExceptionHandler.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourLiveDataService.java`
+- `src/main/java/com/eodegano/cocobackend/client/GroqApiClient.java`
+- `src/main/java/com/eodegano/cocobackend/repository/TourCourseUserDefinedRepository.java`
+- `src/main/java/com/eodegano/cocobackend/util/CompletableFutures.java` (신규)
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+- `docs/code_review/2026-09-05_backend-review.md`
+
 ## [0.8.1] - 2026-09-06
 
 ### Fixed
