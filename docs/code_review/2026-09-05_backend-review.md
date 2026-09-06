@@ -9,7 +9,7 @@
 
 ## 우선순위 1 — 보안 (인증/인가 우회)
 
-### 🔲 1. 카카오 OAuth 이메일 일치만으로 계정 자동 연결 (계정 탈취 가능)
+### ✅ 1. 카카오 OAuth 이메일 일치만으로 계정 자동 연결 (계정 탈취 가능) — 2026-09-06 수정 완료
 
 - **파일**: `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java:48`
 - **문제**: 카카오 로그인 시 카카오 프로필 이메일과 일치하는 로컬 계정이 있으면, 이메일
@@ -21,6 +21,12 @@
 - **수정 방향**: 카카오 계정 정보에서 이메일 인증 여부(`is_email_verified` 등)를 함께
   확인하거나, 자동 연결 대신 로컬 계정 비밀번호 확인 단계를 거치도록 변경. 또는 이메일
   일치 자동 연결 자체를 제거하고 신규 계정으로만 가입 처리.
+- **적용한 수정**: `is_email_valid && is_email_verified`가 모두 true일 때만 이메일 일치로
+  자동 연결(`KakaoOAuthService.registerKakaoUser`). 미인증/미제공 이메일은 기존 계정 조회
+  자체를 하지 않고 합성 이메일(`kakao_<providerId>@kakao.local`)로 항상 별도 신규 계정
+  생성. 정상 사용자의 미인증 이메일 케이스는 계정이 영구 분리되는 트레이드오프가
+  있음(BOQ19로 고도화 TODO 기록, 당장 착수 안 함). 테스트:
+  `KakaoApiClientTest`, `KakaoOAuthServiceTest`. 상세: `docs/PRD_BACK.md` BOQ6/BOQ19.
 
 ### 🔲 2. 회원 정보 API에 소유권(본인 확인) 검증 누락 (IDOR)
 

@@ -49,12 +49,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   그대로 반환해 `uq_email` 유니크 제약 위반이 날 뻔했음 — `providerId` 기반 합성
   이메일을 항상 명시적으로 생성하도록 수정
 
-### Files Changed (4 files)
+### Docs
+
+#### BOQ6/BOQ19 문서 갱신, 백엔드 코드 리뷰 체크리스트 항목 1 완료 처리
+
+- `docs/PRD_BACK.md` BOQ6: 이메일 인증 여부를 확인하는 새 동작으로 갱신
+- `docs/PRD_BACK.md` BOQ19 신규: 미인증 카카오 이메일 사용자의 계정 영구 분리
+  트레이드오프를 고도화 TODO로 기록 (당장 착수 안 함, 마이페이지 수동 연동 기능으로
+  보완 예정)
+- `docs/code_review/2026-09-05_backend-review.md` 항목 1을 ✅ 완료로 표시하고 적용한
+  수정 내용·테스트 파일 기록
+
+### Files Changed (6 files)
 
 - `src/main/java/com/eodegano/cocobackend/client/KakaoApiClient.java`
 - `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java`
 - `src/test/java/com/eodegano/cocobackend/client/KakaoApiClientTest.java`
 - `src/test/java/com/eodegano/cocobackend/service/KakaoOAuthServiceTest.java`
+- `docs/PRD_BACK.md`
+- `docs/code_review/2026-09-05_backend-review.md`
 
 ## [0.7.1] - 2026-09-05
 
