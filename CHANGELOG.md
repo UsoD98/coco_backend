@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-09-20
+
+### Added
+
+#### JWT에 provider 클레임 추가, User.provider 값을 KAKAO/DEFAULT로 명시화
+
+FE가 로그인 수단(카카오/일반)을 판단할 방법이 없어 JWT에 `provider` 클레임을
+추가. 이 값은 `User.provider` 컬럼을 그대로 실어 보내는데, 기존에는 카카오
+로그인만 `"kakao"`(소문자)로 저장하고 일반 이메일 가입은 아예 값을 채우지
+않아 `null`로 남아있어 그대로 노출하기엔 부적절해 값 체계를 정리함.
+
+- `User`: `PROVIDER_KAKAO = "KAKAO"`, `PROVIDER_DEFAULT = "DEFAULT"` 상수 추가.
+  `ofKakao()`/`linkKakao()`가 `"kakao"` 대신 `PROVIDER_KAKAO` 사용
+- `UserServiceImpl.join()`: 이메일 회원가입 시 `provider`를 `PROVIDER_DEFAULT`로
+  명시적으로 저장 (기존엔 미설정으로 null)
+- `KakaoOAuthService`: `User.provider` 조회/저장에는 `User.PROVIDER_KAKAO`를
+  쓰도록 분리하고, `RefreshToken.provider`(User.provider와 별개 테이블·값)는
+  기존 `"kakao"` 그대로 유지 — 두 값의 의미가 다르므로 하나의 상수로 묶여있던
+  걸 분리해 RefreshToken 쪽 데이터/동작에는 영향 없게 함
+- `JwtProvider.generateAccessToken`/`generateRefreshToken`에 `provider`
+  파라미터를 추가하고 페이로드에 `provider` 클레임으로 포함
+
+#### ⚠️ 배포 시 수동 데이터 마이그레이션 필요 (ddl-auto: validate라 자동 반영 안 됨)
+
+기존 DB에는 카카오 유저가 `"kakao"`(소문자), 일반 유저가 `null`로 저장돼
+있어 배포 전/직후 아래 SQL을 반드시 수동 실행해야 함. 실행하지 않으면:
+- 이메일 미인증 카카오 유저(합성 이메일 계정)는 재로그인 시
+  `findByProviderAndProviderId("KAKAO", ...)`로 못 찾아 `registerKakaoUser`가
+  다시 타면서 동일 합성 이메일로 재가입을 시도 → `email` 유니크 제약 위반으로
+  로그인 실패(500)
+- 기존 일반 유저는 마이그레이션 전까지 JWT `provider` 클레임이 `null`로 발급됨
+
+```sql
+UPDATE user SET provider = 'KAKAO'   WHERE provider = 'kakao';
+UPDATE user SET provider = 'DEFAULT' WHERE provider IS NULL;
+```
+
+### Files Changed (9 files)
+
+- `src/main/java/com/eodegano/cocobackend/domain/User.java`
+- `src/main/java/com/eodegano/cocobackend/service/UserServiceImpl.java`
+- `src/main/java/com/eodegano/cocobackend/service/KakaoOAuthService.java`
+- `src/main/java/com/eodegano/cocobackend/service/AuthService.java`
+- `src/main/java/com/eodegano/cocobackend/security/JwtProvider.java`
+- `src/test/java/com/eodegano/cocobackend/security/JwtProviderTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/KakaoOAuthServiceTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/AuthServiceTest.java`
+- `src/test/java/com/eodegano/cocobackend/service/UserServiceTest.java`
+
+## [0.8.6] - 2026-09-20
+
+### Added
+
+#### 코스 생성 응답에 로그인 여부(`login`) 필드 추가
+
+`POST /api/v1/tour-course`는 비로그인 유저도 쓰는 요청이라, 프론트가 응답만
+보고 로그인 여부를 판단할 방법이 없었음. 이미 요청 처리 중 이메일로
+`userId`를 조회해두고 그대로 코스 FK에 저장하고 있어서, 별도 조회 없이
+그 값을 그대로 재사용해 boolean으로 내려주도록 함.
+
+- `TourCourseGenerateResponseDto`: `Boolean login` 필드 추가
+- `TourCourseServiceImpl.generateTourCourse()`: 기존에 확보한 `userId != null`
+  값을 `buildGenerateResponse()`에 전달해 `login` 값으로 세팅
+- 비로그인/로그인 각 케이스에 대한 단위 테스트 추가
+
+### Files Changed (3 files)
+
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseGenerateResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
 ## [0.8.5] - 2026-09-06
 
 ### Fixed

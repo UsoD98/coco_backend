@@ -21,6 +21,7 @@ class JwtProviderTest {
     private static final Long USER_ID = 42L;
     private static final String EMAIL = "test@test.com";
     private static final String ROLE = "USER";
+    private static final String PROVIDER = "DEFAULT";
 
     @BeforeEach
     void setUp() {
@@ -35,7 +36,7 @@ class JwtProviderTest {
     @Test
     @DisplayName("AccessToken 생성 후 유효성 검증 성공")
     void generateAndValidateAccessToken() {
-        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE);
+        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
 
         assertThat(token).isNotBlank();
         assertThat(jwtProvider.validateToken(token)).isTrue();
@@ -44,7 +45,7 @@ class JwtProviderTest {
     @Test
     @DisplayName("RefreshToken 생성 후 유효성 검증 성공")
     void generateAndValidateRefreshToken() {
-        String token = jwtProvider.generateRefreshToken(USER_ID, EMAIL, ROLE);
+        String token = jwtProvider.generateRefreshToken(USER_ID, EMAIL, ROLE, PROVIDER);
 
         assertThat(token).isNotBlank();
         assertThat(jwtProvider.validateToken(token)).isTrue();
@@ -53,7 +54,7 @@ class JwtProviderTest {
     @Test
     @DisplayName("토큰에서 이메일 추출 성공")
     void getEmailFromToken() {
-        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE);
+        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
 
         assertThat(jwtProvider.getEmail(token)).isEqualTo(EMAIL);
     }
@@ -61,7 +62,7 @@ class JwtProviderTest {
     @Test
     @DisplayName("토큰 payload에 userId 클레임이 담겨 FE가 디코딩해서 읽을 수 있음")
     void tokenPayloadContainsUserIdClaim() throws Exception {
-        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE);
+        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
 
         // FE가 하는 것과 동일하게 payload(두 번째 세그먼트)만 base64 디코딩해서 확인
         String payloadJson = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
@@ -71,9 +72,20 @@ class JwtProviderTest {
     }
 
     @Test
+    @DisplayName("토큰 payload에 provider 클레임이 담겨 FE가 디코딩해서 읽을 수 있음")
+    void tokenPayloadContainsProviderClaim() throws Exception {
+        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
+
+        String payloadJson = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+        JsonNode payload = new ObjectMapper().readTree(payloadJson);
+
+        assertThat(payload.get("provider").asText()).isEqualTo(PROVIDER);
+    }
+
+    @Test
     @DisplayName("토큰에서 Authentication 추출 시 email, 권한 정상 매핑")
     void getAuthenticationFromToken() {
-        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE);
+        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
 
         Authentication authentication = jwtProvider.getAuthentication(token);
 
@@ -87,7 +99,7 @@ class JwtProviderTest {
     void expiredTokenValidationFails() {
         // expiry = 0 으로 즉시 만료 토큰 생성
         ReflectionTestUtils.setField(jwtProvider, "accessTokenExpiry", 0L);
-        String expiredToken = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE);
+        String expiredToken = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
 
         assertThat(jwtProvider.validateToken(expiredToken)).isFalse();
     }
@@ -95,7 +107,7 @@ class JwtProviderTest {
     @Test
     @DisplayName("변조된 토큰 검증 실패")
     void tamperedTokenValidationFails() {
-        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE);
+        String token = jwtProvider.generateAccessToken(USER_ID, EMAIL, ROLE, PROVIDER);
         String tampered = token + "tampered";
 
         assertThat(jwtProvider.validateToken(tampered)).isFalse();

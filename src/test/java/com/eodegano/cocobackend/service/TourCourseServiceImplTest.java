@@ -281,6 +281,24 @@ class TourCourseServiceImplTest {
         assertThat(place.getOperatingHours()).isEqualTo("상시 개방");
         assertThat(place.getCost()).isEqualTo(5000);
         assertThat(result.getTitle()).isEqualTo("경주 힐링 코스");
+        assertThat(result.getLogin()).isFalse();
+    }
+
+    @Test
+    @DisplayName("성공 - 로그인 유저가 요청하면 login=true로 응답함")
+    void generateTourCourseSuccessWithLoggedInUser() {
+        given(tourLiveDataService.getAllCandidates()).willReturn(List.of(candidate()));
+        given(tourLiveDataService.getDetail(100L, 12))
+                .willReturn(new PoiDetail(100L, 12, "상시 개방", 5000));
+        given(groqApiClient.generateTourCourse(anyString(), anyString()))
+                .willReturn(aiResponse(START_DATE));
+        given(userRepository.findByEmail(OWNER_EMAIL)).willReturn(Optional.of(owner()));
+        given(tourCourseUserDefinedRepository.save(any())).willReturn(ownedCourse());
+
+        TourCourseGenerateResponseDto result =
+                tourCourseService.generateTourCourse(validGenerateRequest(), OWNER_EMAIL);
+
+        assertThat(result.getLogin()).isTrue();
     }
 
     @Test

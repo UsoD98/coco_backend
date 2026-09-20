@@ -42,6 +42,7 @@ public class UserServiceImpl implements UserService {
                 .email(request.getEmail())
                 .nickname(request.getNickname())
                 .password(encodedPassword)
+                .provider(User.PROVIDER_DEFAULT)
                 .build();
 
         return new UserJoinResponseDto(userRepository.save(user));

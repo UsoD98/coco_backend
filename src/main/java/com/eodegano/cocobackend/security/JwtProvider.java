@@ -44,15 +44,15 @@ public class JwtProvider {
     // 토큰 생성
     // ───────────────────────────────────────────────
 
-    public String generateAccessToken(Long userId, String email, String role) {
-        return buildToken(userId, email, role, accessTokenExpiry);
+    public String generateAccessToken(Long userId, String email, String role, String provider) {
+        return buildToken(userId, email, role, provider, accessTokenExpiry);
     }
 
-    public String generateRefreshToken(Long userId, String email, String role) {
-        return buildToken(userId, email, role, refreshTokenExpiry);
+    public String generateRefreshToken(Long userId, String email, String role, String provider) {
+        return buildToken(userId, email, role, provider, refreshTokenExpiry);
     }
 
-    private String buildToken(Long userId, String email, String role, long expiry) {
+    private String buildToken(Long userId, String email, String role, String provider, long expiry) {
         Date now = new Date();
         Date expiredAt = new Date(now.getTime() + expiry);
 
@@ -60,6 +60,7 @@ public class JwtProvider {
                 .subject(email)
                 .claim("userId", userId)
                 .claim("role", role)
+                .claim("provider", provider)
                 .issuedAt(now)
                 .expiration(expiredAt)
                 .signWith(secretKey)

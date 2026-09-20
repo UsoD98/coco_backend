@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class KakaoOAuthService {
 
-    private static final String PROVIDER = "kakao";
+    // RefreshToken.provider는 User.provider("KAKAO")와 별개의 값으로, 소문자 "kakao"를 그대로 유지한다
+    // (기존 RefreshToken 데이터와의 하위호환 목적 — User.provider 값 변경과 무관)
+    private static final String REFRESH_TOKEN_PROVIDER = "kakao";
 
     private final KakaoApiClient kakaoApiClient;
     private final UserRepository userRepository;
@@ -35,7 +37,7 @@ public class KakaoOAuthService {
         KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
         String providerId = String.valueOf(userInfo.getId());
 
-        User user = userRepository.findByProviderAndProviderId(PROVIDER, providerId)
+        User user = userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, providerId)
                 .orElseGet(() -> registerKakaoUser(userInfo, providerId));
 
         return issueJwtTokens(user);
@@ -68,17 +70,17 @@ public class KakaoOAuthService {
     }
 
     private AuthTokenResult issueJwtTokens(User user) {
-        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
-        String refreshToken = jwtProvider.generateRefreshToken(user.getId(), user.getEmail(), user.getRole());
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole(), user.getProvider());
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId(), user.getEmail(), user.getRole(), user.getProvider());
 
-        refreshTokenRepository.findByUserAndProvider(user, PROVIDER)
+        refreshTokenRepository.findByUserAndProvider(user, REFRESH_TOKEN_PROVIDER)
                 .ifPresentOrElse(
                         existing -> existing.rotate(refreshToken, jwtProvider.getRefreshTokenExpiresAt()),
                         () -> refreshTokenRepository.save(
                                 RefreshToken.builder()
                                         .user(user)
                                         .token(refreshToken)
-                                        .provider(PROVIDER)
+                                        .provider(REFRESH_TOKEN_PROVIDER)
                                         .expiresAt(jwtProvider.getRefreshTokenExpiresAt())
                                         .build()
                         )
