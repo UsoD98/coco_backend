@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-20
+
+### 정식 릴리즈
+
+기능·동작 변경 없음. 배포 파이프라인(Blue/Green CI/CD)까지 검증을 마쳐
+0.x 개발 버전을 종료하고 정식 버전(v1.0.0)으로 릴리즈.
+
 ## [0.8.7] - 2026-09-20
 
 ### Added
