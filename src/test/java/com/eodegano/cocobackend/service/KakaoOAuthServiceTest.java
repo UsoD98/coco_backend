@@ -50,8 +50,8 @@ class KakaoOAuthServiceTest {
     }
 
     private void lenientJwtStubs() {
-        lenient().when(jwtProvider.generateAccessToken(any(), any(), any())).thenReturn(ACCESS_TOKEN);
-        lenient().when(jwtProvider.generateRefreshToken(any(), any(), any())).thenReturn(REFRESH_TOKEN);
+        lenient().when(jwtProvider.generateAccessToken(any(), any(), any(), any())).thenReturn(ACCESS_TOKEN);
+        lenient().when(jwtProvider.generateRefreshToken(any(), any(), any(), any())).thenReturn(REFRESH_TOKEN);
         lenient().when(jwtProvider.getRefreshTokenExpiresAt()).thenReturn(LocalDateTime.now().plusDays(7));
         lenient().when(refreshTokenRepository.findByUserAndProvider(any(User.class), eq("kakao")))
                 .thenReturn(Optional.empty());
@@ -64,7 +64,7 @@ class KakaoOAuthServiceTest {
         KakaoUserInfo userInfo = mock(KakaoUserInfo.class);
         given(userInfo.getId()).willReturn(555L);
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(userInfo);
-        given(userRepository.findByProviderAndProviderId("kakao", "555"))
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "555"))
                 .willReturn(Optional.of(linkedUser));
 
         AuthTokenResult result = kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -85,7 +85,7 @@ class KakaoOAuthServiceTest {
         given(userInfo.getNickname()).willReturn("카카오닉네임");
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(userInfo);
-        given(userRepository.findByProviderAndProviderId("kakao", "111")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "111")).willReturn(Optional.empty());
         given(userRepository.findByEmail("local@example.com"))
                 .willReturn(Optional.of(localUser));
 
@@ -93,6 +93,7 @@ class KakaoOAuthServiceTest {
 
         assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
         verify(localUser).linkKakao("111");
+        assertThat(localUser.getProvider()).isEqualTo(User.PROVIDER_KAKAO);
         verify(userRepository, never()).save(any());
     }
 
@@ -106,7 +107,7 @@ class KakaoOAuthServiceTest {
         given(userInfo.getNickname()).willReturn("신규유저");
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(userInfo);
-        given(userRepository.findByProviderAndProviderId("kakao", "222")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "222")).willReturn(Optional.empty());
         given(userRepository.findByEmail("new@example.com")).willReturn(Optional.empty());
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -116,6 +117,7 @@ class KakaoOAuthServiceTest {
         verify(userRepository).save(captor.capture());
         assertThat(captor.getValue().getEmail()).isEqualTo("new@example.com");
         assertThat(captor.getValue().getProviderId()).isEqualTo("222");
+        assertThat(captor.getValue().getProvider()).isEqualTo(User.PROVIDER_KAKAO);
     }
 
     @Test
@@ -128,7 +130,7 @@ class KakaoOAuthServiceTest {
         given(attackerInfo.getNickname()).willReturn("공격자닉네임");
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(attackerInfo);
-        given(userRepository.findByProviderAndProviderId("kakao", "999")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "999")).willReturn(Optional.empty());
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -152,7 +154,7 @@ class KakaoOAuthServiceTest {
         given(userInfo.getNickname()).willReturn("카카오유저");
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(userInfo);
-        given(userRepository.findByProviderAndProviderId("kakao", "777")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "777")).willReturn(Optional.empty());
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -205,7 +207,7 @@ class KakaoOAuthServiceTest {
                 """);
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(realUserInfo);
-        given(userRepository.findByProviderAndProviderId("kakao", "1001")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "1001")).willReturn(Optional.empty());
         given(userRepository.findByEmail("real@example.com"))
                 .willReturn(Optional.of(localUser));
 
@@ -231,7 +233,7 @@ class KakaoOAuthServiceTest {
                 """);
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(attackPayload);
-        given(userRepository.findByProviderAndProviderId("kakao", "2002")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "2002")).willReturn(Optional.empty());
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
         AuthTokenResult result = kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);
@@ -263,7 +265,7 @@ class KakaoOAuthServiceTest {
                 """);
 
         given(kakaoApiClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(attackPayload);
-        given(userRepository.findByProviderAndProviderId("kakao", "3003")).willReturn(Optional.empty());
+        given(userRepository.findByProviderAndProviderId(User.PROVIDER_KAKAO, "3003")).willReturn(Optional.empty());
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
         kakaoOAuthService.kakaoLogin(KAKAO_ACCESS_TOKEN);

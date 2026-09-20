@@ -15,6 +15,9 @@ import java.time.LocalDateTime;
 @Builder
 public class User {
 
+    public static final String PROVIDER_KAKAO = "KAKAO";
+    public static final String PROVIDER_DEFAULT = "DEFAULT";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -76,7 +79,7 @@ public class User {
         return User.builder()
                 .email(email)
                 .nickname(nickname)
-                .provider("kakao")
+                .provider(PROVIDER_KAKAO)
                 .providerId(providerId)
                 .role("USER")
                 .build();
@@ -96,7 +99,7 @@ public class User {
 
     /** 로컬 계정에 카카오 providerId를 연결한다. */
     public void linkKakao(String providerId) {
-        this.provider = "kakao";
+        this.provider = PROVIDER_KAKAO;
         this.providerId = providerId;
     }
 }

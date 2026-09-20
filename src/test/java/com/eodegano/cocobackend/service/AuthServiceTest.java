@@ -56,6 +56,7 @@ class AuthServiceTest {
                 .nickname("테스터")
                 .password("encodedPassword")
                 .role("USER")
+                .provider(User.PROVIDER_DEFAULT)
                 .build();
     }
 
@@ -69,8 +70,8 @@ class AuthServiceTest {
         Authentication mockAuth = new UsernamePasswordAuthenticationToken(EMAIL, null);
         given(authenticationManager.authenticate(any())).willReturn(mockAuth);
         given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mockUser));
-        given(jwtProvider.generateAccessToken(USER_ID, EMAIL, "USER")).willReturn(ACCESS_TOKEN);
-        given(jwtProvider.generateRefreshToken(USER_ID, EMAIL, "USER")).willReturn(REFRESH_TOKEN);
+        given(jwtProvider.generateAccessToken(USER_ID, EMAIL, "USER", User.PROVIDER_DEFAULT)).willReturn(ACCESS_TOKEN);
+        given(jwtProvider.generateRefreshToken(USER_ID, EMAIL, "USER", User.PROVIDER_DEFAULT)).willReturn(REFRESH_TOKEN);
         given(jwtProvider.getRefreshTokenExpiresAt()).willReturn(LocalDateTime.now().plusDays(7));
         given(refreshTokenRepository.findByUserAndProvider(mockUser, "local")).willReturn(Optional.empty());
 
@@ -93,8 +94,8 @@ class AuthServiceTest {
 
         given(authenticationManager.authenticate(any())).willReturn(mockAuth);
         given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mockUser));
-        given(jwtProvider.generateAccessToken(USER_ID, EMAIL, "USER")).willReturn(ACCESS_TOKEN);
-        given(jwtProvider.generateRefreshToken(USER_ID, EMAIL, "USER")).willReturn(REFRESH_TOKEN);
+        given(jwtProvider.generateAccessToken(USER_ID, EMAIL, "USER", User.PROVIDER_DEFAULT)).willReturn(ACCESS_TOKEN);
+        given(jwtProvider.generateRefreshToken(USER_ID, EMAIL, "USER", User.PROVIDER_DEFAULT)).willReturn(REFRESH_TOKEN);
         given(jwtProvider.getRefreshTokenExpiresAt()).willReturn(LocalDateTime.now().plusDays(7));
         given(refreshTokenRepository.findByUserAndProvider(mockUser, "local")).willReturn(Optional.of(existingToken));
 
@@ -148,8 +149,8 @@ class AuthServiceTest {
 
         given(jwtProvider.validateToken(REFRESH_TOKEN)).willReturn(true);
         given(refreshTokenRepository.findByToken(REFRESH_TOKEN)).willReturn(Optional.of(savedToken));
-        given(jwtProvider.generateAccessToken(USER_ID, EMAIL, "USER")).willReturn("new.access.token");
-        given(jwtProvider.generateRefreshToken(USER_ID, EMAIL, "USER")).willReturn("new.refresh.token");
+        given(jwtProvider.generateAccessToken(USER_ID, EMAIL, "USER", User.PROVIDER_DEFAULT)).willReturn("new.access.token");
+        given(jwtProvider.generateRefreshToken(USER_ID, EMAIL, "USER", User.PROVIDER_DEFAULT)).willReturn("new.refresh.token");
         given(jwtProvider.getRefreshTokenExpiresAt()).willReturn(LocalDateTime.now().plusDays(7));
 
         AuthTokenResult result = authService.reissue(REFRESH_TOKEN);
