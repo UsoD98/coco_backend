@@ -4,6 +4,7 @@
 
 - 공모전 출품작으로, **관광 정보를 로컬 DB에 적재할 수 없다는 규정** 때문에 한국관광공사 TourAPI를 매 요청 라이브로 호출하고 캐시로 보완하는 구조를 채택했습니다.
 - 프론트엔드: https://github.com/UsoD98/Gyeongbuk-CoCo
+- 서비스 URL : https://gbcoco.netlify.app/
 
 ## 목차
 
@@ -18,17 +19,17 @@
 
 ## 기술 스택
 
-| 구분 | 내용 |
-| --- | --- |
-| Language / Runtime | Java 25 |
-| Framework | Spring Boot 4.0 (Web, Security, Validation, Actuator, Cache) |
-| 영속성 | Spring Data JPA(Hibernate) + MyBatis 혼용, MariaDB |
-| 인증 | JWT(jjwt) Stateless 인증, 카카오 OAuth |
-| AI | Groq API (`openai/gpt-oss-20b`) — 코스 생성 |
-| 캐시 | Caffeine (in-process, TTL 6h) |
-| 외부 연동 | 한국관광공사 TourAPI v2 |
+| 구분 | 내용                                                                |
+| --- |-------------------------------------------------------------------|
+| Language / Runtime | Java 25                                                           |
+| Framework | Spring Boot 4.0 (Web, Security, Validation, Actuator, Cache)      |
+| 영속성 | Spring Data JPA(Hibernate) + MariaDB                              |
+| 인증 | JWT(jjwt) Stateless 인증, 카카오 OAuth                                 |
+| AI | Groq API (`openai/gpt-oss-20b`) — 코스 생성                           |
+| 캐시 | Caffeine (in-process, TTL 6h)                                     |
+| 외부 연동 | 한국관광공사 TourAPI v2                                                 |
 | CI/CD | GitHub Actions → systemd + nginx Blue/Green 무중단 배포 (Oracle Cloud) |
-| 테스트 | JUnit5, Mockito, `@WebMvcTest` 슬라이스 테스트 |
+| 테스트 | JUnit5, Mockito, `@WebMvcTest` 슬라이스 테스트                           |
 
 ## 아키텍처
 
@@ -39,9 +40,7 @@ flowchart LR
     Client["Client (FE)"] --> API["Controller"]
     API --> SVC["Service"]
     SVC --> JPA["JPA Repository"]
-    SVC --> MyBatis["MyBatis Mapper"]
     JPA --> DB[("MariaDB\n(User/Course/Like/Rating)")]
-    MyBatis --> DB
     SVC --> Cache["Caffeine Cache\n(TTL 6h)"]
     Cache -->|miss| TourAPI["TourAPI v2\n(area/detail 라이브 호출)"]
     SVC --> Groq["Groq LLM\n(코스 생성)"]
@@ -170,7 +169,6 @@ Groq 호출 실패·응답 파싱 실패·검증 실패는 표준 400/500과 구
 
 ## 문제 해결 히스토리
 
-개발 중 실제로 겪은 문제와 대응을 시간순으로 정리했습니다.
 
 | 버전 | 문제 | 해결 |
 | --- | --- | --- |
