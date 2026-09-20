@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-09-20
+
+### Added
+
+#### 코스 생성 응답에 로그인 여부(`login`) 필드 추가
+
+`POST /api/v1/tour-course`는 비로그인 유저도 쓰는 요청이라, 프론트가 응답만
+보고 로그인 여부를 판단할 방법이 없었음. 이미 요청 처리 중 이메일로
+`userId`를 조회해두고 그대로 코스 FK에 저장하고 있어서, 별도 조회 없이
+그 값을 그대로 재사용해 boolean으로 내려주도록 함.
+
+- `TourCourseGenerateResponseDto`: `Boolean login` 필드 추가
+- `TourCourseServiceImpl.generateTourCourse()`: 기존에 확보한 `userId != null`
+  값을 `buildGenerateResponse()`에 전달해 `login` 값으로 세팅
+- 비로그인/로그인 각 케이스에 대한 단위 테스트 추가
+
+### Files Changed (3 files)
+
+- `src/main/java/com/eodegano/cocobackend/dto/TourCourseGenerateResponseDto.java`
+- `src/main/java/com/eodegano/cocobackend/service/TourCourseServiceImpl.java`
+- `src/test/java/com/eodegano/cocobackend/service/TourCourseServiceImplTest.java`
+
 ## [0.8.5] - 2026-09-06
 
 ### Fixed

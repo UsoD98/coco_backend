@@ -109,7 +109,7 @@ public class TourCourseServiceImpl implements TourCourseService {
         TourCourseAiResponseDto aiResponse = validateAndCorrectAiResponse(
                 rawAiResponse, request.getStartDate(), request.getEndDate(), request.getTransport());
         TourCourseUserDefined savedCourse = saveTourCourse(request, userId, aiResponse);
-        return buildGenerateResponse(savedCourse.getId(), savedCourse.getTitle(), aiResponse);
+        return buildGenerateResponse(savedCourse.getId(), savedCourse.getTitle(), aiResponse, userId != null);
     }
 
     @Override
@@ -283,7 +283,7 @@ public class TourCourseServiceImpl implements TourCourseService {
 
     // ── 코스 응답 빌더 ─────────────────────────────────────────────────────────
 
-    private TourCourseGenerateResponseDto buildGenerateResponse(Long courseId, String title, TourCourseAiResponseDto aiResponse) {
+    private TourCourseGenerateResponseDto buildGenerateResponse(Long courseId, String title, TourCourseAiResponseDto aiResponse, boolean login) {
         List<Long> allContentIds = aiResponse.getSchedule().stream()
                 .flatMap(day -> day.getPlaces().stream())
                 .map(TourCourseAiResponseDto.PlaceVisit::getContentId)
@@ -321,6 +321,7 @@ public class TourCourseServiceImpl implements TourCourseService {
                 .courseId(courseId)
                 .title(title)
                 .schedule(schedules)
+                .login(login)
                 .build();
     }
 

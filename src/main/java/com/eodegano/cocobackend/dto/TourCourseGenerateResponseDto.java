@@ -18,6 +18,7 @@ public class TourCourseGenerateResponseDto {
     private Long courseId;
     private String title;
     private List<DailySchedule> schedule;
+    private Boolean login;
 
     @Getter
     @NoArgsConstructor
